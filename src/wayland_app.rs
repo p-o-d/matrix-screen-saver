@@ -35,8 +35,16 @@ pub enum AppEvent {
     Resume,
     /// Any key/button pressed while the screensaver is active — dismiss.
     Dismiss,
-    /// Compositor sent a new surface size.
-    Resize(u32, u32),
+    /// Compositor sent a new surface size for surface at given index.
+    Resize(usize, u32, u32),
+}
+
+/// One layer surface per output.
+pub struct SurfaceSlot {
+    pub layer_surface: LayerSurface,
+    pub wl_surface: wl_surface::WlSurface,
+    pub configured: bool,
+    pub last_size: Option<(u32, u32)>,
 }
 
 // ---------------------------------------------------------------------------
@@ -49,14 +57,8 @@ pub struct AppState {
     pub output_state: OutputState,
     pub layer_shell: LayerShell,
 
-    /// Active layer surface (present only while screensaver is shown).
-    pub layer_surface: Option<LayerSurface>,
-    /// The underlying `wl_surface` for the layer surface.
-    pub wl_surface: Option<wl_surface::WlSurface>,
-    /// `true` once the compositor has sent the first configure event.
-    pub configured: bool,
-    /// Last size received from the compositor via configure.
-    pub last_configured_size: Option<(u32, u32)>,
+    /// One slot per active output (populated on Idle, cleared on Resume/Dismiss).
+    pub surfaces: Vec<SurfaceSlot>,
 
     /// Idle notifier global (ext-idle-notify-v1).
     pub idle_notifier: Option<ext_idle_notifier_v1::ExtIdleNotifierV1>,
@@ -92,10 +94,7 @@ impl AppState {
             compositor_state,
             output_state,
             layer_shell,
-            layer_surface: None,
-            wl_surface: None,
-            configured: false,
-            last_configured_size: None,
+            surfaces: Vec::new(),
             idle_notifier,
             idle_notification: None,
             event_tx,
@@ -107,18 +106,9 @@ impl AppState {
     // Layer surface lifecycle
     // -----------------------------------------------------------------------
 
-    /// Create the overlay layer surface (used when the screensaver becomes active).
-    pub fn create_layer_surface(&mut self, output: Option<&wl_output::WlOutput>) {
-        if self.layer_surface.is_some() {
-            return;
-        }
-
-        // `compositor_state.create_surface` returns a `wl_surface::WlSurface`.
-        // SCTK's `create_layer_surface` requires `impl Into<Surface>`.
-        // `Surface` has `From<wl_surface::WlSurface>`, so we go via that.
+    fn create_layer_surface_for(&mut self, output: Option<&wl_output::WlOutput>) {
         let wl_surface = self.compositor_state.create_surface(&self.qh);
         let sctk_surface = Surface::from(wl_surface.clone());
-
         let layer_surface = self.layer_shell.create_layer_surface(
             &self.qh,
             sctk_surface,
@@ -126,32 +116,38 @@ impl AppState {
             Some("matrix-screensaver"),
             output,
         );
-
-        // Stretch to fill the entire output.
         layer_surface.set_anchor(Anchor::TOP | Anchor::BOTTOM | Anchor::LEFT | Anchor::RIGHT);
-        // -1 means "take all space, don't reserve any".
         layer_surface.set_exclusive_zone(-1);
-        // Grab keyboard focus so we can detect key presses for dismiss.
         layer_surface.set_keyboard_interactivity(KeyboardInteractivity::Exclusive);
-        // Ask compositor to tell us the size via configure.
         layer_surface.set_size(0, 0);
-
         wl_surface.commit();
-
-        self.wl_surface = Some(wl_surface);
-        self.layer_surface = Some(layer_surface);
-        self.configured = false;
+        self.surfaces.push(SurfaceSlot {
+            layer_surface,
+            wl_surface,
+            configured: false,
+            last_size: None,
+        });
     }
 
-    /// Destroy the overlay layer surface (used when the screensaver is dismissed).
-    pub fn destroy_layer_surface(&mut self) {
-        // Drop the LayerSurface — SCTK destroys the zwlr_layer_surface_v1 role object on drop,
-        // and the underlying wl_surface is wrapped in a `Surface` inside LayerSurface which
-        // destroys it on drop.
-        self.layer_surface = None;
-        // The wl_surface reference we kept is now invalid; clear it.
-        self.wl_surface = None;
-        self.configured = false;
+    /// Create one layer surface per connected output.
+    /// Falls back to a single surface without output binding if none are known yet.
+    pub fn create_layer_surfaces_all(&mut self) {
+        if !self.surfaces.is_empty() {
+            return;
+        }
+        let outputs: Vec<wl_output::WlOutput> = self.output_state.outputs().collect();
+        if outputs.is_empty() {
+            self.create_layer_surface_for(None);
+        } else {
+            for output in &outputs {
+                self.create_layer_surface_for(Some(output));
+            }
+        }
+    }
+
+    /// Destroy all active layer surfaces.
+    pub fn destroy_layer_surfaces(&mut self) {
+        self.surfaces.clear();
     }
 
     // -----------------------------------------------------------------------
@@ -251,28 +247,34 @@ impl LayerShellHandler for AppState {
         &mut self,
         _conn: &Connection,
         _qh: &QueueHandle<Self>,
-        _layer: &LayerSurface,
+        layer: &LayerSurface,
     ) {
-        self.layer_surface = None;
-        self.wl_surface = None;
-        self.configured = false;
+        // Remove just the closed surface; signal main if all gone.
+        self.surfaces.retain(|s| s.layer_surface != *layer);
+        if self.surfaces.is_empty() {
+            let _ = self.event_tx.send(AppEvent::Resume);
+        }
     }
 
     fn configure(
         &mut self,
         _conn: &Connection,
         _qh: &QueueHandle<Self>,
-        _layer: &LayerSurface,
+        layer: &LayerSurface,
         configure: LayerSurfaceConfigure,
         _serial: u32,
     ) {
-        // Note: SCTK calls ack_configure internally before dispatching to us.
-        let (w, h) = configure.new_size;
-        if w > 0 && h > 0 {
-            self.last_configured_size = Some((w, h));
-            let _ = self.event_tx.send(AppEvent::Resize(w, h));
+        // Find which surface slot this configure belongs to.
+        // LayerSurface::PartialEq uses Arc::ptr_eq on the inner data.
+        let idx = self.surfaces.iter().position(|s| s.layer_surface == *layer);
+        if let Some(idx) = idx {
+            let (w, h) = configure.new_size;
+            if w > 0 && h > 0 {
+                self.surfaces[idx].last_size = Some((w, h));
+                let _ = self.event_tx.send(AppEvent::Resize(idx, w, h));
+            }
+            self.surfaces[idx].configured = true;
         }
-        self.configured = true;
     }
 }
 

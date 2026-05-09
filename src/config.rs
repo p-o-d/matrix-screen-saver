@@ -28,7 +28,7 @@ impl Default for DisplayConfig {
     fn default() -> Self {
         Self {
             font: "monospace".into(),
-            font_size: 18.0,
+            font_size: 36.0,
             fps: 60,
         }
     }

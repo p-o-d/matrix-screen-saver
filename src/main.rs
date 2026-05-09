@@ -48,8 +48,8 @@ fn main() {
         .insert(event_loop.handle())
         .expect("WaylandSource insert failed");
 
-    let mut renderer: Option<Renderer> = None;
-    let mut rain: Option<RainSimulator> = None;
+    let mut renderers: Vec<Option<Renderer>> = Vec::new();
+    let mut rains: Vec<Option<RainSimulator>> = Vec::new();
     let mut screensaver_active = false;
     let mut last_frame = Instant::now();
 
@@ -72,50 +72,39 @@ fn main() {
             match event {
                 AppEvent::Idle if !screensaver_active => {
                     tracing::info!("idle: activating screensaver");
-                    app_state.create_layer_surface(None);
+                    app_state.create_layer_surfaces_all();
+                    let n = app_state.surfaces.len();
+                    renderers.resize_with(n, || None);
+                    rains.resize_with(n, || None);
                     screensaver_active = true;
                 }
                 AppEvent::Resume | AppEvent::Dismiss if screensaver_active => {
                     tracing::info!("resume/dismiss: deactivating screensaver");
-                    app_state.destroy_layer_surface();
-                    renderer = None;
-                    rain = None;
+                    app_state.destroy_layer_surfaces();
+                    renderers.clear();
+                    rains.clear();
                     screensaver_active = false;
                 }
-                AppEvent::Resize(w, h) if screensaver_active => {
-                    if let Some(r) = &mut renderer {
+                AppEvent::Resize(idx, w, h) if screensaver_active => {
+                    if idx >= renderers.len() {
+                        renderers.resize_with(idx + 1, || None);
+                        rains.resize_with(idx + 1, || None);
+                    }
+                    if let Some(r) = &mut renderers[idx] {
                         r.resize(w, h);
                         let cols = (w / atlas.cell_width).max(1) as usize;
                         let rows = (h / atlas.cell_height).max(1) as usize;
-                        rain = Some(RainSimulator::new(
-                            cols,
-                            rows,
-                            charset.clone(),
-                            &config.rain,
+                        rains[idx] = Some(RainSimulator::new(cols, rows, charset.clone(), &config.rain));
+                    } else if app_state.surfaces.get(idx).map_or(false, |s| s.configured) {
+                        let display_ptr = get_display_ptr(&conn);
+                        let surface_ptr = get_surface_ptr(&app_state.surfaces[idx].wl_surface);
+                        let r = pollster::block_on(Renderer::new(
+                            display_ptr, surface_ptr, w, h, atlas.clone(), &config,
                         ));
-                    } else if app_state.configured {
-                        // First configure received: create the wgpu renderer
-                        if let Some(ref wl_surface) = app_state.wl_surface {
-                            let display_ptr = get_display_ptr(&conn);
-                            let surface_ptr = get_surface_ptr(wl_surface);
-                            let r = pollster::block_on(Renderer::new(
-                                display_ptr,
-                                surface_ptr,
-                                w,
-                                h,
-                                atlas.clone(),
-                                &config,
-                            ));
-                            let cols = (w / atlas.cell_width).max(1) as usize;
-                            let rows = (h / atlas.cell_height).max(1) as usize;
-                            rain = Some(RainSimulator::new(
-                                cols,
-                                rows,
-                                charset.clone(),
-                                &config.rain,
-                            ));
-                            renderer = Some(r);
-                        }
+                        let cols = (w / atlas.cell_width).max(1) as usize;
+                        let rows = (h / atlas.cell_height).max(1) as usize;
+                        rains[idx] = Some(RainSimulator::new(cols, rows, charset.clone(), &config.rain));
+                        renderers[idx] = Some(r);
                     }
                 }
                 _ => {}
@@ -124,36 +113,43 @@ fn main() {
 
         // Render frame when active
         if screensaver_active {
-            if let (Some(r), Some(sim)) = (&mut renderer, &mut rain) {
-                let now = Instant::now();
-                let delta = now.duration_since(last_frame).as_secs_f32().min(0.1);
-                last_frame = now;
-                sim.update(delta);
-                r.render(&sim.cells);
-
-                if test_mode {
-                    tracing::info!("--test: rendered one frame, exiting 0");
-                    std::process::exit(0);
+            let now = Instant::now();
+            let delta = now.duration_since(last_frame).as_secs_f32().min(0.1);
+            last_frame = now;
+            let mut rendered_any = false;
+            for i in 0..renderers.len() {
+                if let (Some(r), Some(sim)) = (&mut renderers[i], &mut rains[i]) {
+                    sim.update(delta);
+                    r.render(&sim.cells);
+                    rendered_any = true;
                 }
-
-                let elapsed = Instant::now().duration_since(now);
-                if elapsed < frame_duration {
-                    std::thread::sleep(frame_duration - elapsed);
-                }
+            }
+            if rendered_any && test_mode {
+                tracing::info!("--test: rendered one frame, exiting 0");
+                std::process::exit(0);
+            }
+            let elapsed = Instant::now().duration_since(now);
+            if elapsed < frame_duration {
+                std::thread::sleep(frame_duration - elapsed);
             }
         } else if test_mode && !screensaver_active {
             // --test: bypass idle, force activate immediately
             tracing::info!("--test: forcing screensaver activation");
-            app_state.create_layer_surface(None);
+            app_state.create_layer_surfaces_all();
+            let n = app_state.surfaces.len();
+            renderers.resize_with(n, || None);
+            rains.resize_with(n, || None);
             screensaver_active = true;
-            // Dispatch until we get the configure event (up to 1 second)
+            // Dispatch until first surface is configured (up to 1 second)
             let deadline = Instant::now() + Duration::from_secs(1);
-            while !app_state.configured && Instant::now() < deadline {
+            while app_state.surfaces.iter().all(|s| !s.configured) && Instant::now() < deadline {
                 event_loop.dispatch(Some(Duration::from_millis(50)), &mut app_state).unwrap();
             }
-            // Now resend the Resize event so the state machine creates the renderer
-            if let Some((w, h)) = app_state.last_configured_size {
-                let _ = app_state.event_tx.send(AppEvent::Resize(w, h));
+            // Resend Resize for each configured surface
+            for (idx, slot) in app_state.surfaces.iter().enumerate() {
+                if let Some((w, h)) = slot.last_size {
+                    let _ = app_state.event_tx.send(AppEvent::Resize(idx, w, h));
+                }
             }
         } else {
             last_frame = Instant::now();
