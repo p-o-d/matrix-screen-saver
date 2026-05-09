@@ -73,6 +73,9 @@ density = 0.05        # probability new drop spawns per column per frame
 charset = "mixed"     # mixed | katakana | latin | binary
 drop_length_min = 5
 drop_length_max = 25
+depth_levels = 3          # number of depth layers (1 = flat, no perspective)
+depth_scale_min = 0.4     # cell scale of farthest layer (closest = 1.0)
+depth_brightness_min = 0.3 # brightness multiplier of farthest layer
 
 [colors]
 primary = "#00ff41"   # main rain color
@@ -95,14 +98,28 @@ timeout_seconds = 120
 - Each frame: advance drops by speed, spawn new drops at density probability
 - Produces per-cell brightness values (head=1.0, gradient to 0.0 at tail)
 - Character mutation: random char changes each frame at head position
+- Instantiated once per depth level per screen (different grid dimensions per level)
+
+### 3b. Depth / Perspective (`src/main.rs` orchestration)
+- `depth_levels` independent `RainSimulator` instances per screen, indexed 0 (far) → N-1 (near)
+- Scale factor per level `i`: `depth_scale_min + (1.0 - depth_scale_min) * i / (N-1)`
+  - Example (N=3, min=0.4): [0.40, 0.70, 1.00]
+- Brightness multiplier per level: `depth_brightness_min + (1.0 - depth_brightness_min) * i / (N-1)`
+  - Example (N=3, min=0.3): [0.30, 0.65, 1.00]
+- Grid dimensions per level: `cols = screen_w / (cell_w * scale)`, `rows = screen_h / (cell_h * scale)`
+  - Far levels: more columns (denser, smaller cells)
+  - Near levels: fewer columns (sparser, larger cells)
+- Rendering order: far (level 0) first → near (level N-1) last (painter's algorithm, no depth buffer)
 
 ### 4. Renderer (`src/renderer.rs`)
-- Init: rasterize full charset → GPU texture atlas via `glyphon`
+- Init: rasterize full charset → GPU texture atlas via fontdue
+- `Instance` struct: `{position, atlas_rect, brightness, is_head, scale}` — `scale` drives quad size
 - Per frame:
-  1. Build instance buffer from rain simulator output
-  2. Render pass: draw instanced quads sampling atlas, apply brightness + color
+  1. Build instance buffer: all depth levels, far→near order; each instance carries its scale and brightness-mult-adjusted brightness
+  2. Render pass: draw instanced quads; shader uses `cfg.cell_size * inst.scale` for quad dimensions
   3. Glow pass: render to offscreen texture → Gaussian blur → additive blend
-- Uses `wgpu` with Vulkan backend, surface created by `winit`
+- `render()` accepts `&[DepthLayer]` (cells + scale + brightness_mult per level)
+- Uses `wgpu` with Vulkan backend, surface created from raw Wayland handles
 
 ### 5. Window/Surface (`src/window.rs`)
 - Uses `smithay-client-toolkit` for `wlr-layer-shell-unstable-v1`
@@ -183,7 +200,7 @@ echo "Installed. Run: ~/.local/bin/matrix-screensaver"
 
 ## Customizable Parameters
 
-Font, font size, FPS cap, rain speed, column density, drop length range, charset, primary color, background color, glow on/off, glow intensity, idle timeout.
+Font, font size, FPS cap, rain speed, column density, drop length range, charset, primary color, background color, glow on/off, glow intensity, idle timeout, depth levels, farthest-layer scale, farthest-layer brightness.
 
 ## Verification
 
