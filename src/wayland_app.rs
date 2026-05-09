@@ -73,10 +73,11 @@ impl AppState {
         qh: QueueHandle<Self>,
         _config: &Config,
         event_tx: mpsc::Sender<AppEvent>,
-    ) -> Self {
-        let compositor_state =
-            CompositorState::bind(globals, &qh).expect("wl_compositor not available");
-        let layer_shell = LayerShell::bind(globals, &qh).expect("zwlr_layer_shell_v1 not available");
+    ) -> Result<Self, String> {
+        let compositor_state = CompositorState::bind(globals, &qh)
+            .map_err(|e| format!("compositor not available: {e:?}"))?;
+        let layer_shell = LayerShell::bind(globals, &qh)
+            .map_err(|e| format!("wlr-layer-shell not available (try KDE Plasma or a wlr compositor): {e:?}"))?;
         let output_state = OutputState::new(globals, &qh);
 
         // Attempt to bind ext-idle-notify-v1 (optional — compositor may not advertise it).
@@ -84,7 +85,7 @@ impl AppState {
             .bind(&qh, 1..=1, ())
             .ok();
 
-        Self {
+        Ok(Self {
             registry_state: RegistryState::new(globals),
             compositor_state,
             output_state,
@@ -96,7 +97,7 @@ impl AppState {
             idle_notification: None,
             event_tx,
             qh,
-        }
+        })
     }
 
     // -----------------------------------------------------------------------
@@ -164,6 +165,7 @@ impl AppState {
         timeout_ms: u32,
     ) {
         if let Some(ref notifier) = self.idle_notifier {
+            self.idle_notification = None; // cancel previous subscription if any
             let notification = notifier.get_idle_notification(timeout_ms, seat, &self.qh, ());
             self.idle_notification = Some(notification);
         }
