@@ -61,7 +61,8 @@ struct BlurParams {
 #[derive(Copy, Clone, Pod, Zeroable)]
 struct ScanlineParams {
     intensity: f32,
-    _pad: [f32; 3],
+    width: u32,
+    _pad: [u32; 2],
 }
 
 pub struct Renderer {
@@ -488,7 +489,8 @@ impl Renderer {
             label: Some("scanline_uniform"),
             contents: bytemuck::bytes_of(&ScanlineParams {
                 intensity: config.display.scanline_intensity,
-                _pad: [0.0; 3],
+                width: ((config.display.font_size / 18.0).round() as u32).max(1),
+                _pad: [0; 2],
             }),
             usage: wgpu::BufferUsages::UNIFORM,
         });
