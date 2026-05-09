@@ -3,6 +3,10 @@ name = "matrix-screensaver"
 version = "0.1.0"
 edition = "2021"
 
+[lib]
+name = "matrix_screensaver"
+path = "src/lib.rs"
+
 [[bin]]
 name = "matrix-screensaver"
 path = "src/main.rs"
