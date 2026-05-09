@@ -57,6 +57,13 @@ struct BlurParams {
     _pad: f32,
 }
 
+#[repr(C)]
+#[derive(Copy, Clone, Pod, Zeroable)]
+struct ScanlineParams {
+    intensity: f32,
+    _pad: [f32; 3],
+}
+
 pub struct Renderer {
     pub device: wgpu::Device,
     pub queue: wgpu::Queue,
@@ -85,6 +92,9 @@ pub struct Renderer {
 
     bg_color: wgpu::Color,
     glow_enabled: bool,
+    scanline_pipeline: wgpu::RenderPipeline,
+    scanline_bind_group: wgpu::BindGroup,
+    scanline_enabled: bool,
     pub width: u32,
     pub height: u32,
     pub atlas: Arc<GlyphAtlas>,
@@ -472,6 +482,47 @@ impl Renderer {
             multiview: None,
         });
 
+        // ── Scanline pipeline ──────────────────────────────────────────────
+        let scanline_shader = device.create_shader_module(wgpu::include_wgsl!("shaders/scanline.wgsl"));
+        let scanline_uniform_buf = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("scanline_uniform"),
+            contents: bytemuck::bytes_of(&ScanlineParams {
+                intensity: config.display.scanline_intensity,
+                _pad: [0.0; 3],
+            }),
+            usage: wgpu::BufferUsages::UNIFORM,
+        });
+        // Reuse blend_bgl layout (texture + sampler + uniform) — same structure.
+        let scanline_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("scanline_bg"), layout: &blend_bgl,
+            entries: &[
+                wgpu::BindGroupEntry { binding: 0, resource: wgpu::BindingResource::TextureView(&offscreen_view) },
+                wgpu::BindGroupEntry { binding: 1, resource: wgpu::BindingResource::Sampler(&blur_sampler) },
+                wgpu::BindGroupEntry { binding: 2, resource: scanline_uniform_buf.as_entire_binding() },
+            ],
+        });
+        let scanline_pl = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            label: Some("scanline_pl"), bind_group_layouts: &[&blend_bgl], push_constant_ranges: &[],
+        });
+        let scanline_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some("scanline_pipeline"), layout: Some(&scanline_pl),
+            vertex: wgpu::VertexState {
+                module: &scanline_shader, entry_point: "vs_main",
+                compilation_options: Default::default(), buffers: &[],
+            },
+            fragment: Some(wgpu::FragmentState {
+                module: &scanline_shader, entry_point: "fs_main",
+                compilation_options: Default::default(),
+                targets: &[Some(wgpu::ColorTargetState {
+                    format, blend: None, write_mask: wgpu::ColorWrites::ALL,
+                })],
+            }),
+            primitive: wgpu::PrimitiveState::default(),
+            depth_stencil: None,
+            multisample: wgpu::MultisampleState::default(),
+            multiview: None,
+        });
+
         // ── Instance buffer ────────────────────────────────────────────────
         // Sum cell counts across all depth levels (far level has smallest scale → most cells).
         let base_cw = atlas.cell_width as f32;
@@ -500,6 +551,8 @@ impl Renderer {
             blur_pipeline, blur_h_bind_group,
             blend_pipeline, copy_bind_group, glow_bind_group,
             bg_color, glow_enabled: config.colors.glow,
+            scanline_pipeline, scanline_bind_group,
+            scanline_enabled: config.display.scanlines,
             width, height, atlas,
         }
     }
@@ -601,7 +654,7 @@ impl Renderer {
                 pass.draw(0..3, 0..1);
             }
 
-            // Pass 3: copy offscreen (full scene) to frame
+            // Pass 3: copy offscreen to frame (with scanlines if enabled)
             {
                 let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                     label: Some("copy_to_frame"),
@@ -615,8 +668,13 @@ impl Renderer {
                     })],
                     ..Default::default()
                 });
-                pass.set_pipeline(&self.blend_pipeline);
-                pass.set_bind_group(0, &self.copy_bind_group, &[]);
+                if self.scanline_enabled {
+                    pass.set_pipeline(&self.scanline_pipeline);
+                    pass.set_bind_group(0, &self.scanline_bind_group, &[]);
+                } else {
+                    pass.set_pipeline(&self.blend_pipeline);
+                    pass.set_bind_group(0, &self.copy_bind_group, &[]);
+                }
                 pass.draw(0..3, 0..1);
             }
 
@@ -638,8 +696,44 @@ impl Renderer {
                 pass.set_bind_group(0, &self.glow_bind_group, &[]);
                 pass.draw(0..3, 0..1);
             }
+        } else if self.scanline_enabled {
+            // No glow, but scanlines: rain → offscreen, then scanline → frame
+            {
+                let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                    label: Some("rain_offscreen"),
+                    color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                        view: &self.offscreen_view,
+                        resolve_target: None,
+                        ops: clear_bg,
+                    })],
+                    ..Default::default()
+                });
+                if !instances.is_empty() {
+                    pass.set_pipeline(&self.rain_pipeline);
+                    pass.set_bind_group(0, &self.rain_bind_group, &[]);
+                    pass.set_vertex_buffer(0, self.instance_buf.slice(..));
+                    pass.draw(0..6, 0..instances.len() as u32);
+                }
+            }
+            {
+                let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                    label: Some("scanline_to_frame"),
+                    color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                        view: &frame_view,
+                        resolve_target: None,
+                        ops: wgpu::Operations {
+                            load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
+                            store: wgpu::StoreOp::Store,
+                        },
+                    })],
+                    ..Default::default()
+                });
+                pass.set_pipeline(&self.scanline_pipeline);
+                pass.set_bind_group(0, &self.scanline_bind_group, &[]);
+                pass.draw(0..3, 0..1);
+            }
         } else {
-            // No glow: render directly to frame
+            // No glow, no scanlines: render directly to frame
             let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("rain_direct"),
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {

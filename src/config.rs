@@ -22,6 +22,8 @@ pub struct DisplayConfig {
     pub font: String,
     pub font_size: f32,
     pub fps: u32,
+    pub scanlines: bool,
+    pub scanline_intensity: f32,
 }
 
 impl Default for DisplayConfig {
@@ -30,6 +32,8 @@ impl Default for DisplayConfig {
             font: "monospace".into(),
             font_size: 36.0,
             fps: 60,
+            scanlines: true,
+            scanline_intensity: 0.25,
         }
     }
 }

@@ -2,6 +2,8 @@
 font = "monospace"
 font_size = 36
 fps = 60
+scanlines = true
+scanline_intensity = 0.25
 
 [rain]
 speed = 1.0
