@@ -1,6 +1,8 @@
 use rand::{rngs::SmallRng, Rng, SeedableRng};
 use crate::config::RainConfig;
 
+const BASE_SPEED_CELLS_PER_SEC: f32 = 8.0;
+
 #[derive(Clone)]
 pub struct CellState {
     pub ch: char,
@@ -39,6 +41,9 @@ pub struct RainSimulator {
 impl RainSimulator {
     pub fn new(columns: usize, rows: usize, charset: Vec<char>, config: &RainConfig) -> Self {
         let cells = vec![vec![CellState::default(); columns]; rows];
+        assert!(!charset.is_empty(), "RainSimulator: charset must not be empty");
+        let drop_length_min = config.drop_length_min.min(config.drop_length_max);
+        let drop_length_max = config.drop_length_max.max(config.drop_length_min).max(1);
         Self {
             columns,
             rows,
@@ -46,9 +51,9 @@ impl RainSimulator {
             drops: Vec::new(),
             charset,
             density: config.density,
-            base_speed: config.speed * 8.0,
-            drop_length_min: config.drop_length_min,
-            drop_length_max: config.drop_length_max,
+            base_speed: config.speed * BASE_SPEED_CELLS_PER_SEC,
+            drop_length_min,
+            drop_length_max,
             rng: SmallRng::from_entropy(),
         }
     }
