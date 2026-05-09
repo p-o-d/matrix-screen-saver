@@ -473,7 +473,18 @@ impl Renderer {
         });
 
         // ── Instance buffer ────────────────────────────────────────────────
-        let max_instances = ((width / atlas.cell_width.max(1)) * (height / atlas.cell_height.max(1))) as usize + 256;
+        // Sum cell counts across all depth levels (far level has smallest scale → most cells).
+        let base_cw = atlas.cell_width as f32;
+        let base_ch = atlas.cell_height as f32;
+        let n = (config.rain.depth_levels as usize).max(1);
+        let min_s = config.rain.depth_scale_min.max(0.1);
+        let max_instances: usize = (0..n).map(|i| {
+            let t = if n == 1 { 1.0_f32 } else { i as f32 / (n - 1) as f32 };
+            let s = min_s + (1.0 - min_s) * t;
+            let cols = (width as f32 / (base_cw * s)).ceil() as usize;
+            let rows = (height as f32 / (base_ch * s)).ceil() as usize;
+            cols * rows
+        }).sum::<usize>() + 256;
         let instance_buf = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("instance_buf"),
             size: (max_instances * std::mem::size_of::<Instance>()) as u64,
