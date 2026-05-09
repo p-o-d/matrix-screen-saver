@@ -35,6 +35,9 @@ pub struct RainSimulator {
     base_speed: f32,
     drop_length_min: usize,
     drop_length_max: usize,
+    /// Per-column heat: decays each frame, boosted by nearby spawns for clustering.
+    heat: Vec<f32>,
+    cluster_strength: f32,
     rng: SmallRng,
 }
 
@@ -54,6 +57,8 @@ impl RainSimulator {
             base_speed: config.speed * BASE_SPEED_CELLS_PER_SEC,
             drop_length_min,
             drop_length_max,
+            heat: vec![0.0; columns],
+            cluster_strength: config.cluster_strength.max(0.0),
             rng: SmallRng::from_entropy(),
         }
     }
@@ -66,11 +71,15 @@ impl RainSimulator {
             }
         }
 
-        let spawn_prob = (self.density * delta * 60.0).min(1.0);
+        // Decay heat each frame (~0.25s half-life at 60fps).
+        for h in &mut self.heat {
+            *h *= 0.88_f32.powf(delta * 60.0);
+        }
+
+        let base_prob = (self.density * delta * 60.0).min(1.0);
         for col in 0..self.columns {
+            let spawn_prob = (base_prob + self.heat[col] * 0.5).min(1.0);
             if self.rng.gen::<f32>() < spawn_prob {
-                // Don't spawn if an existing drop's head is still near the top,
-                // to avoid two heads occupying adjacent rows in the same column.
                 let too_close = self.drops.iter().any(|d| {
                     d.column == col && d.head_row < (d.length as f32 + 1.0)
                 });
@@ -90,6 +99,17 @@ impl RainSimulator {
                     chars,
                     mutation_timer: 0.0,
                 });
+                // Spread heat to neighboring columns — creates soft spatial clusters.
+                if self.cluster_strength > 0.0 {
+                    let radius: i32 = 4;
+                    for offset in -radius..=radius {
+                        let nc = col as i32 + offset;
+                        if nc >= 0 && nc < self.columns as i32 {
+                            self.heat[nc as usize] +=
+                                self.cluster_strength / (offset.unsigned_abs() as f32 + 1.0);
+                        }
+                    }
+                }
             }
         }
 

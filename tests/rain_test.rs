@@ -45,6 +45,10 @@ fn default_rain_config() -> RainConfig {
         charset: CharsetKind::Latin,
         drop_length_min: 3,
         drop_length_max: 5,
+        depth_levels: 1,
+        depth_scale_min: 1.0,
+        depth_brightness_min: 1.0,
+        cluster_strength: 0.0,
     }
 }
 

@@ -48,8 +48,10 @@ fn main() {
         .insert(event_loop.handle())
         .expect("WaylandSource insert failed");
 
+    let levels = depth_levels(&config.rain);
     let mut renderers: Vec<Option<Renderer>> = Vec::new();
-    let mut rains: Vec<Option<RainSimulator>> = Vec::new();
+    // Outer: per screen. Inner: one RainSimulator per depth level, far (0) → near (last).
+    let mut rains: Vec<Vec<RainSimulator>> = Vec::new();
     let mut screensaver_active = false;
     let mut last_frame = Instant::now();
 
@@ -75,7 +77,7 @@ fn main() {
                     app_state.create_layer_surfaces_all();
                     let n = app_state.surfaces.len();
                     renderers.resize_with(n, || None);
-                    rains.resize_with(n, || None);
+                    rains.resize_with(n, Vec::new);
                     screensaver_active = true;
                 }
                 AppEvent::Resume | AppEvent::Dismiss if screensaver_active => {
@@ -88,22 +90,19 @@ fn main() {
                 AppEvent::Resize(idx, w, h) if screensaver_active => {
                     if idx >= renderers.len() {
                         renderers.resize_with(idx + 1, || None);
-                        rains.resize_with(idx + 1, || None);
+                        rains.resize_with(idx + 1, Vec::new);
                     }
+                    let screen_rains = make_rains(w, h, &atlas, &levels, &charset, &config.rain);
                     if let Some(r) = &mut renderers[idx] {
                         r.resize(w, h);
-                        let cols = (w / atlas.cell_width).max(1) as usize;
-                        let rows = (h / atlas.cell_height).max(1) as usize;
-                        rains[idx] = Some(RainSimulator::new(cols, rows, charset.clone(), &config.rain));
+                        rains[idx] = screen_rains;
                     } else if app_state.surfaces.get(idx).map_or(false, |s| s.configured) {
                         let display_ptr = get_display_ptr(&conn);
                         let surface_ptr = get_surface_ptr(&app_state.surfaces[idx].wl_surface);
                         let r = pollster::block_on(Renderer::new(
                             display_ptr, surface_ptr, w, h, atlas.clone(), &config,
                         ));
-                        let cols = (w / atlas.cell_width).max(1) as usize;
-                        let rows = (h / atlas.cell_height).max(1) as usize;
-                        rains[idx] = Some(RainSimulator::new(cols, rows, charset.clone(), &config.rain));
+                        rains[idx] = screen_rains;
                         renderers[idx] = Some(r);
                     }
                 }
@@ -118,9 +117,23 @@ fn main() {
             last_frame = now;
             let mut rendered_any = false;
             for i in 0..renderers.len() {
-                if let (Some(r), Some(sim)) = (&mut renderers[i], &mut rains[i]) {
-                    sim.update(delta);
-                    r.render(&sim.cells);
+                if let Some(r) = &mut renderers[i] {
+                    if rains[i].is_empty() { continue; }
+                    for sim in &mut rains[i] {
+                        sim.update(delta);
+                    }
+                    let depth_layers: Vec<matrix_screensaver::renderer::DepthLayer<'_>> = rains[i]
+                        .iter()
+                        .zip(levels.iter())
+                        .map(|(sim, &(scale, brightness_mult))| {
+                            matrix_screensaver::renderer::DepthLayer {
+                                cells: &sim.cells,
+                                scale,
+                                brightness_mult,
+                            }
+                        })
+                        .collect();
+                    r.render(&depth_layers);
                     rendered_any = true;
                 }
             }
@@ -138,7 +151,7 @@ fn main() {
             app_state.create_layer_surfaces_all();
             let n = app_state.surfaces.len();
             renderers.resize_with(n, || None);
-            rains.resize_with(n, || None);
+            rains.resize_with(n, Vec::new);
             screensaver_active = true;
             // Dispatch until first surface is configured (up to 1 second)
             let deadline = Instant::now() + Duration::from_secs(1);
@@ -156,6 +169,34 @@ fn main() {
             std::thread::sleep(Duration::from_millis(10));
         }
     }
+}
+
+/// Compute per-level (scale, brightness_mult) pairs, far (index 0) → near (index N-1).
+fn depth_levels(config: &matrix_screensaver::config::RainConfig) -> Vec<(f32, f32)> {
+    let n = (config.depth_levels as usize).max(1);
+    (0..n).map(|i| {
+        let t = if n == 1 { 1.0 } else { i as f32 / (n - 1) as f32 };
+        let scale = config.depth_scale_min + (1.0 - config.depth_scale_min) * t;
+        let bri = config.depth_brightness_min + (1.0 - config.depth_brightness_min) * t;
+        (scale, bri)
+    }).collect()
+}
+
+/// Build one RainSimulator per depth level for a given screen size.
+fn make_rains(
+    w: u32, h: u32,
+    atlas: &matrix_screensaver::atlas::GlyphAtlas,
+    levels: &[(f32, f32)],
+    charset: &[char],
+    config: &matrix_screensaver::config::RainConfig,
+) -> Vec<RainSimulator> {
+    let cw = atlas.cell_width as f32;
+    let ch = atlas.cell_height as f32;
+    levels.iter().map(|&(scale, _)| {
+        let cols = ((w as f32 / (cw * scale)) as usize).max(1);
+        let rows = ((h as f32 / (ch * scale)) as usize).max(1);
+        RainSimulator::new(cols, rows, charset.to_vec(), config)
+    }).collect()
 }
 
 /// Bind a `wl_seat` from the global list and register an idle-notification with the

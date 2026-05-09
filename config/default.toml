@@ -9,6 +9,10 @@ density = 0.05
 charset = "mixed"
 drop_length_min = 5
 drop_length_max = 25
+depth_levels = 6
+depth_scale_min = 0.35
+depth_brightness_min = 0.25
+cluster_strength = 0.2
 
 [colors]
 primary = "#00ff41"

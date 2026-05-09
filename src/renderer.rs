@@ -3,22 +3,33 @@ use bytemuck::{Pod, Zeroable};
 use wgpu::util::DeviceExt;
 use crate::{atlas::GlyphAtlas, config::Config, rain::CellState};
 
+/// One depth plane passed to `Renderer::render()`.
+pub struct DepthLayer<'a> {
+    pub cells: &'a [Vec<CellState>],
+    /// Uniform scale applied to cell size and grid spacing (1.0 = nearest/base).
+    pub scale: f32,
+    /// Multiplied onto each cell's brightness (1.0 = nearest/full).
+    pub brightness_mult: f32,
+}
+
 /// Per-instance GPU data — one per visible character cell.
 #[repr(C)]
 #[derive(Copy, Clone, Pod, Zeroable)]
 pub struct Instance {
-    pub position: [f32; 2],
-    pub atlas_rect: [f32; 4],
+    pub position: [f32; 2],   // top-left pixel, pre-scaled
+    pub atlas_rect: [f32; 4], // UV rect in atlas texture
     pub brightness: f32,
     pub is_head: u32,
+    pub scale: f32,           // quad size = cell_size * scale
 }
 
 impl Instance {
-    const ATTRIBS: [wgpu::VertexAttribute; 4] = wgpu::vertex_attr_array![
+    const ATTRIBS: [wgpu::VertexAttribute; 5] = wgpu::vertex_attr_array![
         0 => Float32x2,
         1 => Float32x4,
         2 => Float32,
         3 => Uint32,
+        4 => Float32,
     ];
 
     pub fn layout() -> wgpu::VertexBufferLayout<'static> {
@@ -491,7 +502,8 @@ impl Renderer {
         self.surface.configure(&self.device, &self.surface_config);
     }
 
-    pub fn render(&mut self, cells: &[Vec<CellState>]) {
+    /// Render one frame. `layers` are ordered far→near; near instances are drawn on top.
+    pub fn render(&mut self, layers: &[DepthLayer<'_>]) {
         let frame = match self.surface.get_current_texture() {
             Ok(f) => f,
             Err(e) => {
@@ -505,18 +517,23 @@ impl Renderer {
         let cw = self.atlas.cell_width as f32;
         let ch = self.atlas.cell_height as f32;
 
-        // Build instance buffer from the cell grid
+        // Build instance buffer: all depth layers far→near (painter's algorithm).
         let mut instances: Vec<Instance> = Vec::new();
-        for (row_idx, row) in cells.iter().enumerate() {
-            for (col_idx, cell) in row.iter().enumerate() {
-                if cell.brightness < 0.01 { continue; }
-                let uv = self.atlas.uv_for_char(cell.ch);
-                instances.push(Instance {
-                    position: [col_idx as f32 * cw, row_idx as f32 * ch],
-                    atlas_rect: uv,
-                    brightness: cell.brightness,
-                    is_head: cell.is_head as u32,
-                });
+        for layer in layers {
+            let lcw = cw * layer.scale;
+            let lch = ch * layer.scale;
+            for (row_idx, row) in layer.cells.iter().enumerate() {
+                for (col_idx, cell) in row.iter().enumerate() {
+                    if cell.brightness < 0.01 { continue; }
+                    let uv = self.atlas.uv_for_char(cell.ch);
+                    instances.push(Instance {
+                        position: [col_idx as f32 * lcw, row_idx as f32 * lch],
+                        atlas_rect: uv,
+                        brightness: (cell.brightness * layer.brightness_mult).min(1.0),
+                        is_head: cell.is_head as u32,
+                        scale: layer.scale,
+                    });
+                }
             }
         }
         instances.truncate(self.max_instances);

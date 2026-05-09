@@ -11,10 +11,11 @@ struct RainConfig {
 @group(0) @binding(2) var atlas_sampler: sampler;
 
 struct Instance {
-    @location(0) position: vec2<f32>,    // top-left pixel of cell
+    @location(0) position: vec2<f32>,    // top-left pixel of cell (pre-scaled)
     @location(1) atlas_rect: vec4<f32>,  // u, v, w, h in [0,1] texture space
     @location(2) brightness: f32,
     @location(3) is_head: u32,
+    @location(4) scale: f32,            // depth scale: quad = cell_size * scale
 }
 
 struct VsOut {
@@ -32,7 +33,8 @@ var<private> QUAD: array<vec2<f32>, 6> = array<vec2<f32>, 6>(
 @vertex
 fn vs_main(@builtin(vertex_index) vi: u32, inst: Instance) -> VsOut {
     let local = QUAD[vi];
-    let px = inst.position + local * cfg.cell_size;
+    let actual_cell = cfg.cell_size * inst.scale;
+    let px = inst.position + local * actual_cell;
     let ndc = vec2<f32>(
         px.x / cfg.screen_size.x * 2.0 - 1.0,
         1.0 - px.y / cfg.screen_size.y * 2.0,

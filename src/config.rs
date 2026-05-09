@@ -42,6 +42,15 @@ pub struct RainConfig {
     pub charset: CharsetKind,
     pub drop_length_min: usize,
     pub drop_length_max: usize,
+    /// Number of depth planes (1 = flat, no perspective).
+    pub depth_levels: u8,
+    /// Cell scale of the farthest plane (nearest = 1.0).
+    pub depth_scale_min: f32,
+    /// Brightness multiplier of the farthest plane (nearest = 1.0).
+    pub depth_brightness_min: f32,
+    /// Controls how much a new drop boosts spawn probability in nearby columns.
+    /// 0.0 = uniform, 0.2 = subtle clusters.
+    pub cluster_strength: f32,
 }
 
 impl Default for RainConfig {
@@ -52,6 +61,10 @@ impl Default for RainConfig {
             charset: CharsetKind::Mixed,
             drop_length_min: 5,
             drop_length_max: 25,
+            depth_levels: 6,
+            depth_scale_min: 0.35,
+            depth_brightness_min: 0.25,
+            cluster_strength: 0.2,
         }
     }
 }
