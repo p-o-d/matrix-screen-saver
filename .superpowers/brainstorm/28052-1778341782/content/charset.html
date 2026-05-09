@@ -1,0 +1,93 @@
+<h2>Character Set</h2>
+<p class="subtitle">What symbols rain down? Pick one.</p>
+
+<style>
+.cards { display: flex; gap: 20px; flex-wrap: wrap; justify-content: center; margin-top: 24px; }
+.card { width: 240px; border-radius: 12px; overflow: hidden; cursor: pointer; border: 2px solid transparent; transition: border-color 0.2s; background: #111; }
+.card.selected { border-color: #00ff41; }
+.card-image {
+  height: 170px; display: flex; align-items: center; justify-content: center;
+  font-family: monospace; font-size: 14px; line-height: 1.5; overflow: hidden;
+  background: #000; color: #00a827; padding: 10px; position: relative;
+}
+.card-image .bright { color: #afffcf; font-weight: bold; text-shadow: 0 0 10px #00ff41, 0 0 18px #00ff41; }
+.card-image .mid   { color: #00a827; }
+.card-image .dim   { color: #003b10; }
+.card-body { padding: 12px 14px; background: #1a1a1a; }
+.card-body h3 { margin: 0 0 4px; font-size: 14px; }
+.card-body p  { margin: 0; font-size: 12px; color: #888; }
+</style>
+
+<div class="cards">
+
+  <div class="card" data-choice="katakana" onclick="toggleSelect(this)">
+    <div class="card-image">
+<pre><span class="dim">ｦ ｱ ﾊ ｿ ﾓ ﾃ ｺ ﾁ</span>
+<span class="mid">ﾂ ﾊ ｸ ﾃ ｦ ﾀ ﾁ ﾂ</span>
+<span class="bright">ﾓ ﾃ ﾓ ｶ ｺ ﾂ ﾊ ｱ</span>
+<span class="mid">ﾁ ｶ ﾀ ｦ ﾓ ﾃ ｿ ｸ</span>
+<span class="dim">ﾊ ｦ ｱ ﾊ ﾀ ｦ ﾓ ｿ</span>
+<span class="mid">ｸ ﾊ ﾃ ｿ ｦ ﾀ ﾁ ｸ</span>
+<span class="bright">ﾃ ｦ ﾓ ﾃ ﾓ ｶ ｺ ﾂ</span>
+<span class="dim">ｱ ﾀ ﾁ ｶ ﾀ ｦ ﾓ ﾃ</span></pre>
+    </div>
+    <div class="card-body">
+      <h3>A — Katakana</h3>
+      <p>Half-width Japanese. Screen-accurate to the film.</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="mixed" onclick="toggleSelect(this)">
+    <div class="card-image">
+<pre><span class="dim">ｦ 3 A ｿ 7 ﾃ Z ﾁ</span>
+<span class="mid">2 ﾊ K ﾃ 9 ﾀ ﾁ Q</span>
+<span class="bright">ﾓ 5 ﾓ ｶ T ﾂ ﾊ 1</span>
+<span class="mid">B ｶ 4 ｦ ﾓ ﾃ ｿ M</span>
+<span class="dim">ﾊ 0 ｱ ﾊ X ｦ ﾓ ｿ</span>
+<span class="mid">ｸ ﾊ 8 ｿ ｦ Y ﾁ ｸ</span>
+<span class="bright">ﾃ 6 ﾓ N ﾓ ｶ ｺ ﾂ</span>
+<span class="dim">ｱ ﾀ J ｶ 2 ｦ ﾓ ﾃ</span></pre>
+    </div>
+    <div class="card-body">
+      <h3>B — Mixed</h3>
+      <p>Katakana + Latin + digits. Film-accurate mix.</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="latin-digits" onclick="toggleSelect(this)">
+    <div class="card-image">
+<pre><span class="dim">A 3 Z 7 Q 2 X 9</span>
+<span class="mid">K 5 M 1 B 8 T 4</span>
+<span class="bright">N 6 J 0 R 2 W 7</span>
+<span class="mid">P 4 Y 9 C 1 H 5</span>
+<span class="dim">F 8 L 3 V 6 S 0</span>
+<span class="mid">G 2 D 7 E 4 U 9</span>
+<span class="bright">I 1 O 8 A 3 Z 6</span>
+<span class="dim">K 5 M 2 B 7 T 4</span></pre>
+    </div>
+    <div class="card-body">
+      <h3>C — Latin + Digits</h3>
+      <p>A-Z and 0-9 only. More readable, Western feel.</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="binary" onclick="toggleSelect(this)">
+    <div class="card-image">
+<pre><span class="dim">0 1 0 0 1 1 0 1</span>
+<span class="mid">1 0 1 1 0 0 1 0</span>
+<span class="bright">0 1 1 0 1 0 0 1</span>
+<span class="mid">1 1 0 1 0 1 1 0</span>
+<span class="dim">0 0 1 0 1 1 0 1</span>
+<span class="mid">1 0 0 1 1 0 1 0</span>
+<span class="bright">0 1 0 1 0 0 1 1</span>
+<span class="dim">1 1 1 0 0 1 0 1</span></pre>
+    </div>
+    <div class="card-body">
+      <h3>D — Binary</h3>
+      <p>0s and 1s only. Classic "hacker" aesthetic.</p>
+    </div>
+  </div>
+
+</div>
+
+<p class="subtitle" style="margin-top:20px;">All options: charset configurable in config file. This picks the default.</p>

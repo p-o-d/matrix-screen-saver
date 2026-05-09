@@ -1,0 +1,118 @@
+<h2>Matrix Rain — Visual Style</h2>
+<p class="subtitle">Which style fits best? Pick one.</p>
+
+<style>
+.cards { display: flex; gap: 20px; flex-wrap: wrap; justify-content: center; margin-top: 24px; }
+.card { width: 260px; border-radius: 12px; overflow: hidden; cursor: pointer; border: 2px solid transparent; transition: border-color 0.2s; background: #111; }
+.card.selected { border-color: #00ff41; }
+.card-image { height: 180px; display: flex; align-items: center; justify-content: center; font-family: monospace; font-size: 13px; line-height: 1.4; overflow: hidden; position: relative; padding: 8px; }
+.card-body { padding: 12px 14px; background: #1a1a1a; }
+.card-body h3 { margin: 0 0 4px; font-size: 14px; }
+.card-body p { margin: 0; font-size: 12px; color: #888; }
+
+/* Style A: Classic green */
+.style-a .card-image { background: #000; color: #00ff41; }
+.style-a .card-image .dim { color: #003b10; }
+.style-a .card-image .mid { color: #00a827; }
+.style-a .card-image .bright { color: #00ff41; font-weight: bold; }
+
+/* Style B: Blue/cyan */
+.style-b .card-image { background: #000010; color: #00cfff; }
+.style-b .card-image .dim { color: #00204a; }
+.style-b .card-image .mid { color: #0088cc; }
+.style-b .card-image .bright { color: #00eeff; font-weight: bold; }
+
+/* Style C: Classic with glow */
+.style-c .card-image { background: #000; color: #00ff41; text-shadow: 0 0 8px #00ff41; }
+.style-c .card-image .dim { color: #003b10; text-shadow: 0 0 2px #003b10; }
+.style-c .card-image .mid { color: #00a827; text-shadow: 0 0 5px #00a827; }
+.style-c .card-image .bright { color: #afffcf; font-weight: bold; text-shadow: 0 0 12px #00ff41, 0 0 20px #00ff41; }
+
+/* Style D: Custom color (purple/neon) */
+.style-d .card-image { background: #050010; color: #bf00ff; }
+.style-d .card-image .dim { color: #2a0040; }
+.style-d .card-image .mid { color: #7700bb; }
+.style-d .card-image .bright { color: #ff44ff; font-weight: bold; text-shadow: 0 0 8px #bf00ff; }
+</style>
+
+<div class="cards">
+
+  <div class="card style-a" data-choice="classic-green" onclick="toggleSelect(this)">
+    <div class="card-image">
+<pre><span class="dim">ﾊ ｦ ｱ ﾊ ﾀ ｦ ﾓ ｿ ｺ ﾁ</span>
+<span class="mid">ｸ ﾊ ﾃ ｿ ｦ ﾀ ﾁ ｸ ﾊ ﾂ</span>
+<span class="dim">ﾃ ｦ ﾓ ﾃ ﾓ ｶ ｺ ﾂ ﾊ ｱ</span>
+<span class="mid">ﾀ ﾁ ｶ ﾀ ｦ ﾓ ﾃ ｿ ｸ ﾊ</span>
+<span class="bright">ﾊ ﾂ ﾃ ｦ ﾀ ｱ ﾁ ﾊ ﾓ ｿ</span>
+<span class="mid">ｺ ﾁ ﾊ ﾀ ｦ ﾓ ｿ ｺ ﾁ ｸ</span>
+<span class="dim">ﾊ ｦ ｱ ﾊ ﾀ ｦ ﾓ ｿ ｺ ﾁ</span>
+<span class="mid">ｸ ﾊ ﾃ ｿ ｦ ﾀ ﾁ ｸ ﾊ ﾂ</span>
+<span class="bright">ﾃ ｦ ﾓ ﾃ ﾓ ｶ ｺ ﾂ ﾊ ｱ</span>
+<span class="dim">ﾀ ﾁ ｶ ﾀ ｦ ﾓ ﾃ ｿ ｸ ﾊ</span></pre>
+    </div>
+    <div class="card-body">
+      <h3>A — Classic Green</h3>
+      <p>Katakana chars, matrix-green, no glow</p>
+    </div>
+  </div>
+
+  <div class="card style-c" data-choice="glow-green" onclick="toggleSelect(this)">
+    <div class="card-image">
+<pre><span class="dim">ﾊ ｦ ｱ ﾊ ﾀ ｦ ﾓ ｿ ｺ ﾁ</span>
+<span class="mid">ｸ ﾊ ﾃ ｿ ｦ ﾀ ﾁ ｸ ﾊ ﾂ</span>
+<span class="dim">ﾃ ｦ ﾓ ﾃ ﾓ ｶ ｺ ﾂ ﾊ ｱ</span>
+<span class="mid">ﾀ ﾁ ｶ ﾀ ｦ ﾓ ﾃ ｿ ｸ ﾊ</span>
+<span class="bright">ﾊ ﾂ ﾃ ｦ ﾀ ｱ ﾁ ﾊ ﾓ ｿ</span>
+<span class="mid">ｺ ﾁ ﾊ ﾀ ｦ ﾓ ｿ ｺ ﾁ ｸ</span>
+<span class="dim">ﾊ ｦ ｱ ﾊ ﾀ ｦ ﾓ ｿ ｺ ﾁ</span>
+<span class="mid">ｸ ﾊ ﾃ ｿ ｦ ﾀ ﾁ ｸ ﾊ ﾂ</span>
+<span class="bright">ﾃ ｦ ﾓ ﾃ ﾓ ｶ ｺ ﾂ ﾊ ｱ</span>
+<span class="dim">ﾀ ﾁ ｶ ﾀ ｦ ﾓ ﾃ ｿ ｸ ﾊ</span></pre>
+    </div>
+    <div class="card-body">
+      <h3>B — Glowing Green</h3>
+      <p>Same chars, phosphor glow effect on bright heads</p>
+    </div>
+  </div>
+
+  <div class="card style-b" data-choice="blue-cyan" onclick="toggleSelect(this)">
+    <div class="card-image">
+<pre><span class="dim">ﾊ ｦ ｱ ﾊ ﾀ ｦ ﾓ ｿ ｺ ﾁ</span>
+<span class="mid">ｸ ﾊ ﾃ ｿ ｦ ﾀ ﾁ ｸ ﾊ ﾂ</span>
+<span class="dim">ﾃ ｦ ﾓ ﾃ ﾓ ｶ ｺ ﾂ ﾊ ｱ</span>
+<span class="mid">ﾀ ﾁ ｶ ﾀ ｦ ﾓ ﾃ ｿ ｸ ﾊ</span>
+<span class="bright">ﾊ ﾂ ﾃ ｦ ﾀ ｱ ﾁ ﾊ ﾓ ｿ</span>
+<span class="mid">ｺ ﾁ ﾊ ﾀ ｦ ﾓ ｿ ｺ ﾁ ｸ</span>
+<span class="dim">ﾊ ｦ ｱ ﾊ ﾀ ｦ ﾓ ｿ ｺ ﾁ</span>
+<span class="mid">ｸ ﾊ ﾃ ｿ ｦ ﾀ ﾁ ｸ ﾊ ﾂ</span>
+<span class="bright">ﾃ ｦ ﾓ ﾃ ﾓ ｶ ｺ ﾂ ﾊ ｱ</span>
+<span class="dim">ﾀ ﾁ ｶ ﾀ ｦ ﾓ ﾃ ｿ ｸ ﾊ</span></pre>
+    </div>
+    <div class="card-body">
+      <h3>C — Blue/Cyan</h3>
+      <p>Alternate color scheme, same animation logic</p>
+    </div>
+  </div>
+
+  <div class="card style-d" data-choice="custom-color" onclick="toggleSelect(this)">
+    <div class="card-image">
+<pre><span class="dim">ﾊ ｦ ｱ ﾊ ﾀ ｦ ﾓ ｿ ｺ ﾁ</span>
+<span class="mid">ｸ ﾊ ﾃ ｿ ｦ ﾀ ﾁ ｸ ﾊ ﾂ</span>
+<span class="dim">ﾃ ｦ ﾓ ﾃ ﾓ ｶ ｺ ﾂ ﾊ ｱ</span>
+<span class="mid">ﾀ ﾁ ｶ ﾀ ｦ ﾓ ﾃ ｿ ｸ ﾊ</span>
+<span class="bright">ﾊ ﾂ ﾃ ｦ ﾀ ｱ ﾁ ﾊ ﾓ ｿ</span>
+<span class="mid">ｺ ﾁ ﾊ ﾀ ｦ ﾓ ｿ ｺ ﾁ ｸ</span>
+<span class="dim">ﾊ ｦ ｱ ﾊ ﾀ ｦ ﾓ ｿ ｺ ﾁ</span>
+<span class="mid">ｸ ﾊ ﾃ ｿ ｦ ﾀ ﾁ ｸ ﾊ ﾂ</span>
+<span class="bright">ﾃ ｦ ﾓ ﾃ ﾓ ｶ ｺ ﾂ ﾊ ｱ</span>
+<span class="dim">ﾀ ﾁ ｶ ﾀ ｦ ﾓ ﾃ ｿ ｸ ﾊ</span></pre>
+    </div>
+    <div class="card-body">
+      <h3>D — Fully Custom</h3>
+      <p>Config file sets any color (default = green, user picks)</p>
+    </div>
+  </div>
+
+</div>
+
+<p class="subtitle" style="margin-top:24px;">Note: All styles include configurable color via config file. This picks the <em>default</em> look.</p>
