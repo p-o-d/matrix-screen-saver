@@ -33,13 +33,30 @@ fn vs_main(@builtin(vertex_index) i: u32) -> VsOut {
 @fragment
 fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
     let texel = 1.0 / vec2<f32>(textureDimensions(src));
-    let W = array<f32, 5>(0.2270270, 0.1945946, 0.1216216, 0.0540540, 0.0162162);
+    // Unrolled: naga rejects dynamic array indexing in wgpu 0.20
+    let w0 = 0.2270270;
+    let w1 = 0.1945946;
+    let w2 = 0.1216216;
+    let w3 = 0.0540540;
+    let w4 = 0.0162162;
 
-    var col = textureSample(src, src_sampler, in.uv) * W[0];
-    for (var i = 1; i < 5; i++) {
-        let off = params.direction * texel * f32(i);
-        col += textureSample(src, src_sampler, in.uv + off) * W[i];
-        col += textureSample(src, src_sampler, in.uv - off) * W[i];
-    }
+    var col = textureSample(src, src_sampler, in.uv) * w0;
+
+    let off1 = params.direction * texel;
+    col += textureSample(src, src_sampler, in.uv + off1) * w1;
+    col += textureSample(src, src_sampler, in.uv - off1) * w1;
+
+    let off2 = params.direction * texel * 2.0;
+    col += textureSample(src, src_sampler, in.uv + off2) * w2;
+    col += textureSample(src, src_sampler, in.uv - off2) * w2;
+
+    let off3 = params.direction * texel * 3.0;
+    col += textureSample(src, src_sampler, in.uv + off3) * w3;
+    col += textureSample(src, src_sampler, in.uv - off3) * w3;
+
+    let off4 = params.direction * texel * 4.0;
+    col += textureSample(src, src_sampler, in.uv + off4) * w4;
+    col += textureSample(src, src_sampler, in.uv - off4) * w4;
+
     return col * params.intensity;
 }
