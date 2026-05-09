@@ -55,6 +55,8 @@ pub struct AppState {
     pub wl_surface: Option<wl_surface::WlSurface>,
     /// `true` once the compositor has sent the first configure event.
     pub configured: bool,
+    /// Last size received from the compositor via configure.
+    pub last_configured_size: Option<(u32, u32)>,
 
     /// Idle notifier global (ext-idle-notify-v1).
     pub idle_notifier: Option<ext_idle_notifier_v1::ExtIdleNotifierV1>,
@@ -93,6 +95,7 @@ impl AppState {
             layer_surface: None,
             wl_surface: None,
             configured: false,
+            last_configured_size: None,
             idle_notifier,
             idle_notification: None,
             event_tx,
@@ -266,6 +269,7 @@ impl LayerShellHandler for AppState {
         // Note: SCTK calls ack_configure internally before dispatching to us.
         let (w, h) = configure.new_size;
         if w > 0 && h > 0 {
+            self.last_configured_size = Some((w, h));
             let _ = self.event_tx.send(AppEvent::Resize(w, h));
         }
         self.configured = true;

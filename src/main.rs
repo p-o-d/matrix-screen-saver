@@ -141,31 +141,23 @@ fn main() {
                     std::thread::sleep(frame_duration - elapsed);
                 }
             }
+        } else if test_mode && !screensaver_active {
+            // --test: bypass idle, force activate immediately
+            tracing::info!("--test: forcing screensaver activation");
+            app_state.create_layer_surface(None);
+            screensaver_active = true;
+            // Dispatch until we get the configure event (up to 1 second)
+            let deadline = Instant::now() + Duration::from_secs(1);
+            while !app_state.configured && Instant::now() < deadline {
+                event_loop.dispatch(Some(Duration::from_millis(50)), &mut app_state).unwrap();
+            }
+            // Now resend the Resize event so the state machine creates the renderer
+            if let Some((w, h)) = app_state.last_configured_size {
+                let _ = app_state.event_tx.send(AppEvent::Resize(w, h));
+            }
         } else {
             last_frame = Instant::now();
-
-            if test_mode {
-                // --test mode: force activate screensaver immediately (bypass idle detection)
-                tracing::info!("--test: forcing screensaver activation");
-                app_state.create_layer_surface(None);
-                screensaver_active = true;
-                // Give the compositor time to send the configure event
-                event_loop
-                    .dispatch(Some(Duration::from_millis(200)), &mut app_state)
-                    .unwrap();
-                // Drain any events the compositor sent
-                while let Ok(_) = event_rx.try_recv() {}
-                // Manually trigger Resize processing on next iteration if configured
-                if app_state.configured {
-                    // Compositor has already sent size; force a dummy resize event so the
-                    // renderer gets created on the next loop iteration.
-                    // We push a Resize with a sensible fallback — the compositor's configure
-                    // event will have already been handled by AppState.configure(), which
-                    // sends AppEvent::Resize through the channel; we just need to re-drain.
-                }
-            } else {
-                std::thread::sleep(Duration::from_millis(10));
-            }
+            std::thread::sleep(Duration::from_millis(10));
         }
     }
 }
