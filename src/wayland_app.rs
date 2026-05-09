@@ -327,6 +327,24 @@ impl Dispatch<ext_idle_notification_v1::ExtIdleNotificationV1, ()> for AppState 
 }
 
 // ---------------------------------------------------------------------------
+// Dispatch for wl_seat (no-op — we only bind a seat to pass it to idle-notify)
+// ---------------------------------------------------------------------------
+
+impl Dispatch<wayland_client::protocol::wl_seat::WlSeat, ()> for AppState {
+    fn event(
+        _state: &mut Self,
+        _proxy: &wayland_client::protocol::wl_seat::WlSeat,
+        _event: wayland_client::protocol::wl_seat::Event,
+        _data: &(),
+        _conn: &Connection,
+        _qh: &QueueHandle<Self>,
+    ) {
+        // No-op: we don't process seat events, we only use the seat object
+        // as a handle to identify user input for ext-idle-notify-v1.
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Delegate macros
 // ---------------------------------------------------------------------------
 

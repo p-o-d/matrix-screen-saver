@@ -15,6 +15,7 @@ path = "src/main.rs"
 # Wayland
 smithay-client-toolkit = { version = "0.18", features = ["calloop"] }
 wayland-client = "0.31"
+wayland-backend = { version = "0.3", features = ["client_system"] }
 wayland-protocols = { version = "0.32", features = ["client", "staging"] }
 wayland-protocols-wlr = { version = "0.2", features = ["client"] }
 calloop = "0.13"
