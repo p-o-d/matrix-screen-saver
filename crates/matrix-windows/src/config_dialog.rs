@@ -53,34 +53,16 @@ mod imp {
         )
     }
 
-    fn charset_str(c: &CharsetKind) -> &'static str {
-        match c {
-            CharsetKind::Mixed => "mixed",
-            CharsetKind::Katakana => "katakana",
-            CharsetKind::Latin => "latin",
-            CharsetKind::Binary => "binary",
-        }
-    }
-
     fn save_config(config: &Config) {
-        let charset = charset_str(&config.rain.charset);
-        let content = format!(
-            "[display]\nfps = {fps}\n\n[rain]\nspeed = {speed:.2}\ndensity = {density:.3}\ncharset = \"{charset}\"\n\n[colors]\nprimary = \"{primary}\"\nglow = {glow}\n",
-            fps = config.display.fps,
-            speed = config.rain.speed,
-            density = config.rain.density,
-            charset = charset,
-            primary = config.colors.primary,
-            glow = config.colors.glow,
-        );
-
         let dir = dirs::config_dir()
             .unwrap_or_else(|| std::path::PathBuf::from("."))
             .join("matrix-screensaver");
-
-        let _ = std::fs::create_dir_all(&dir);
+        std::fs::create_dir_all(&dir).ok();
         let path = dir.join("config.toml");
-        let _ = std::fs::write(&path, content);
+        match toml::to_string(config) {
+            Ok(content) => { std::fs::write(path, content).ok(); }
+            Err(e) => { eprintln!("Failed to serialize config: {e}"); }
+        }
     }
 
     fn to_wide(s: &str) -> Vec<u16> {
