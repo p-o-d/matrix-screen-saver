@@ -41,8 +41,8 @@ matrix-screensaver --test
 
 ### Windows
 
-1. Download `matrix-screensaver.exe` from [CI artifacts](https://github.com/p-o-d/matrix-screen-saver/actions/workflows/ci.yml)
-2. Rename to `matrix-screensaver.scr`, copy to `C:\Windows\System32\`
+1. Download `matrix-screensaver.scr` from [CI artifacts](https://github.com/p-o-d/matrix-screen-saver/actions/workflows/ci.yml)
+2. Copy to `C:\Windows\System32\`
 3. Right-click the `.scr` file → **Install**  
    — or open **Screen Saver Settings** → select **Matrix Screensaver** → click **Settings** to configure
 
@@ -117,6 +117,11 @@ crates/
 ├── matrix-linux/    # Wayland event loop, idle detection, fc-match font, /proc stats
 └── matrix-windows/  # Win32 screensaver + config dialog + embedded font fallback
 ```
+
+## Documentation
+
+- [Architecture](docs/architecture.md) — crate boundaries, data flow, adding a new platform
+- [Rendering pipeline](docs/rendering.md) — GPU passes, shaders, instance buffer, depth layers
 
 ## Requirements
 
