@@ -108,9 +108,14 @@ pub struct Renderer {
     blur_h_view: wgpu::TextureView,
     blur_pipeline: wgpu::RenderPipeline,
     blur_h_bind_group: wgpu::BindGroup,
+    blur_bgl: wgpu::BindGroupLayout,
+    blur_sampler: wgpu::Sampler,
+    blur_h_uniform_buf: wgpu::Buffer,
 
     // Additive blend pipeline (copies offscreen or blends blurred result)
     blend_pipeline: wgpu::RenderPipeline,
+    blend_bgl: wgpu::BindGroupLayout,
+    passthrough_uniform: wgpu::Buffer,
     // Bind group for copying offscreen → frame
     copy_bind_group: wgpu::BindGroup,
     // Bind group for blending blur_h (horizontal glow) onto frame
@@ -120,6 +125,7 @@ pub struct Renderer {
     glow_enabled: bool,
     scanline_pipeline: wgpu::RenderPipeline,
     scanline_bind_group: wgpu::BindGroup,
+    scanline_uniform_buf: wgpu::Buffer,
     scanline_enabled: bool,
     debug: Option<DebugResources>,
     pub width: u32,
@@ -235,18 +241,22 @@ impl Renderer {
             .expect("GPU device request failed");
 
         let caps = surface.get_capabilities(&adapter);
-        let format = caps.formats.iter()
-            .find(|&&f| f == wgpu::TextureFormat::Bgra8Unorm)
+        let surface_format = caps.formats.iter()
+            .find(|f| f.is_srgb())
             .copied()
-            .unwrap_or(caps.formats[0]);
+            .unwrap_or_else(|| caps.formats.first().copied()
+                .expect("GPU adapter returned no surface formats"));
+
+        let alpha_mode = caps.alpha_modes.first().copied()
+            .unwrap_or(wgpu::CompositeAlphaMode::Auto);
 
         let surface_config = wgpu::SurfaceConfiguration {
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
-            format,
+            format: surface_format,
             width,
             height,
             present_mode: wgpu::PresentMode::Fifo,
-            alpha_mode: caps.alpha_modes[0],
+            alpha_mode,
             view_formats: vec![],
             desired_maximum_frame_latency: 2,
         };
@@ -370,7 +380,7 @@ impl Renderer {
                 entry_point: "fs_main",
                 compilation_options: Default::default(),
                 targets: &[Some(wgpu::ColorTargetState {
-                    format,
+                    format: surface_format,
                     blend: Some(wgpu::BlendState::ALPHA_BLENDING),
                     write_mask: wgpu::ColorWrites::ALL,
                 })],
@@ -389,7 +399,7 @@ impl Renderer {
                 mip_level_count: 1,
                 sample_count: 1,
                 dimension: wgpu::TextureDimension::D2,
-                format,
+                format: surface_format,
                 usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
                 view_formats: &[],
             })
@@ -474,7 +484,7 @@ impl Renderer {
                 entry_point: "fs_main",
                 compilation_options: Default::default(),
                 targets: &[Some(wgpu::ColorTargetState {
-                    format, blend: None, write_mask: wgpu::ColorWrites::ALL,
+                    format: surface_format, blend: None, write_mask: wgpu::ColorWrites::ALL,
                 })],
             }),
             primitive: wgpu::PrimitiveState::default(),
@@ -562,7 +572,7 @@ impl Renderer {
                 entry_point: "fs_main",
                 compilation_options: Default::default(),
                 targets: &[Some(wgpu::ColorTargetState {
-                    format, blend: Some(additive), write_mask: wgpu::ColorWrites::ALL,
+                    format: surface_format, blend: Some(additive), write_mask: wgpu::ColorWrites::ALL,
                 })],
             }),
             primitive: wgpu::PrimitiveState::default(),
@@ -605,7 +615,7 @@ impl Renderer {
                 module: &scanline_shader, entry_point: "fs_main",
                 compilation_options: Default::default(),
                 targets: &[Some(wgpu::ColorTargetState {
-                    format, blend: None, write_mask: wgpu::ColorWrites::ALL,
+                    format: surface_format, blend: None, write_mask: wgpu::ColorWrites::ALL,
                 })],
             }),
             primitive: wgpu::PrimitiveState::default(),
@@ -737,7 +747,7 @@ impl Renderer {
                     module: &rect_shader, entry_point: "fs_main",
                     compilation_options: Default::default(),
                     targets: &[Some(wgpu::ColorTargetState {
-                        format, blend: Some(wgpu::BlendState::ALPHA_BLENDING),
+                        format: surface_format, blend: Some(wgpu::BlendState::ALPHA_BLENDING),
                         write_mask: wgpu::ColorWrites::ALL,
                     })],
                 }),
@@ -768,9 +778,11 @@ impl Renderer {
             instance_buf, max_instances,
             offscreen_view, blur_h_view,
             blur_pipeline, blur_h_bind_group,
-            blend_pipeline, copy_bind_group, glow_bind_group,
+            blur_bgl, blur_sampler, blur_h_uniform_buf,
+            blend_pipeline, blend_bgl, passthrough_uniform,
+            copy_bind_group, glow_bind_group,
             bg_color, glow_enabled: config.colors.glow,
-            scanline_pipeline, scanline_bind_group,
+            scanline_pipeline, scanline_bind_group, scanline_uniform_buf,
             scanline_enabled: config.display.scanlines || config.display.chromatic_aberration > 0.0,
             debug,
             width, height, atlas,
@@ -791,6 +803,73 @@ impl Renderer {
         self.surface_config.width = width;
         self.surface_config.height = height;
         self.surface.configure(&self.device, &self.surface_config);
+
+        // Recreate offscreen textures at the new size so the glow/scanline passes
+        // read and write correctly-sized textures.
+        let format = self.surface_config.format;
+        let make_offscreen = |device: &wgpu::Device, label: &'static str| {
+            device.create_texture(&wgpu::TextureDescriptor {
+                label: Some(label),
+                size: wgpu::Extent3d { width, height, depth_or_array_layers: 1 },
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: wgpu::TextureDimension::D2,
+                format,
+                usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
+                view_formats: &[],
+            })
+        };
+        let offscreen_tex = make_offscreen(&self.device, "offscreen");
+        let offscreen_view = offscreen_tex.create_view(&Default::default());
+        let blur_h_tex = make_offscreen(&self.device, "blur_h");
+        let blur_h_view = blur_h_tex.create_view(&Default::default());
+
+        // Recreate blur bind group (offscreen → blur_h pass)
+        let blur_h_bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("blur_h_bg"), layout: &self.blur_bgl,
+            entries: &[
+                wgpu::BindGroupEntry { binding: 0, resource: wgpu::BindingResource::TextureView(&offscreen_view) },
+                wgpu::BindGroupEntry { binding: 1, resource: wgpu::BindingResource::Sampler(&self.blur_sampler) },
+                wgpu::BindGroupEntry { binding: 2, resource: self.blur_h_uniform_buf.as_entire_binding() },
+            ],
+        });
+
+        // Recreate copy bind group (offscreen → frame)
+        let copy_bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("copy_bg"), layout: &self.blend_bgl,
+            entries: &[
+                wgpu::BindGroupEntry { binding: 0, resource: wgpu::BindingResource::TextureView(&offscreen_view) },
+                wgpu::BindGroupEntry { binding: 1, resource: wgpu::BindingResource::Sampler(&self.blur_sampler) },
+                wgpu::BindGroupEntry { binding: 2, resource: self.passthrough_uniform.as_entire_binding() },
+            ],
+        });
+
+        // Recreate glow bind group (blur_h → frame additive)
+        let glow_bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("glow_bg"), layout: &self.blend_bgl,
+            entries: &[
+                wgpu::BindGroupEntry { binding: 0, resource: wgpu::BindingResource::TextureView(&blur_h_view) },
+                wgpu::BindGroupEntry { binding: 1, resource: wgpu::BindingResource::Sampler(&self.blur_sampler) },
+                wgpu::BindGroupEntry { binding: 2, resource: self.passthrough_uniform.as_entire_binding() },
+            ],
+        });
+
+        // Recreate scanline bind group (offscreen → frame with scanline effect)
+        let scanline_bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("scanline_bg"), layout: &self.blend_bgl,
+            entries: &[
+                wgpu::BindGroupEntry { binding: 0, resource: wgpu::BindingResource::TextureView(&offscreen_view) },
+                wgpu::BindGroupEntry { binding: 1, resource: wgpu::BindingResource::Sampler(&self.blur_sampler) },
+                wgpu::BindGroupEntry { binding: 2, resource: self.scanline_uniform_buf.as_entire_binding() },
+            ],
+        });
+
+        self.offscreen_view = offscreen_view;
+        self.blur_h_view = blur_h_view;
+        self.blur_h_bind_group = blur_h_bind_group;
+        self.copy_bind_group = copy_bind_group;
+        self.glow_bind_group = glow_bind_group;
+        self.scanline_bind_group = scanline_bind_group;
     }
 
     /// Render one frame. `layers` are ordered far→near; near instances are drawn on top.
@@ -821,13 +900,13 @@ impl Renderer {
 
         // Build instance buffer: all depth layers far→near (painter's algorithm).
         self.instances_scratch.clear();
-        for layer in layers {
+        'outer: for layer in layers {
             let lcw = cw * layer.scale;
             let lch = ch * layer.scale;
             for (row_idx, row) in layer.cells.iter().enumerate() {
                 for (col_idx, cell) in row.iter().enumerate() {
                     if cell.brightness < 0.01 { continue; }
-                    if self.instances_scratch.len() == self.max_instances { break; }
+                    if self.instances_scratch.len() >= self.max_instances { break 'outer; }
                     let uv = self.atlas.uv_for_char(cell.ch);
                     self.instances_scratch.push(Instance {
                         position: [col_idx as f32 * lcw, row_idx as f32 * lch],
