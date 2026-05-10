@@ -245,7 +245,7 @@ pub fn run() {
         let elapsed = now.duration_since(last_frame);
 
         if elapsed >= frame_duration {
-            let dt = elapsed.as_secs_f32();
+            let dt = elapsed.as_secs_f32().min(0.1);
             last_frame = now;
 
             // Step simulation

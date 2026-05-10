@@ -16,9 +16,9 @@ use raw_window_handle::{
 use windows::Win32::Foundation::{HWND, LPARAM, LRESULT, RECT, WPARAM};
 use windows::Win32::System::LibraryLoader::GetModuleHandleW;
 use windows::Win32::UI::WindowsAndMessaging::{
-    CreateWindowExW, DefWindowProcW, DispatchMessageW, GetClientRect, MSG, PeekMessageW,
-    RegisterClassExW, ShowWindow, TranslateMessage, WNDCLASSEXW, CS_HREDRAW, CS_VREDRAW,
-    PM_REMOVE, SW_SHOW, WM_QUIT, WINDOW_EX_STYLE, WS_CHILD, WS_VISIBLE,
+    CreateWindowExW, DefWindowProcW, DestroyWindow, DispatchMessageW, GetClientRect, MSG,
+    PeekMessageW, RegisterClassExW, TranslateMessage, WNDCLASSEXW, CS_HREDRAW, CS_VREDRAW,
+    PM_REMOVE, WM_QUIT, WINDOW_EX_STYLE, WS_CHILD, WS_VISIBLE,
 };
 use windows::core::PCWSTR;
 
@@ -39,9 +39,11 @@ pub fn run(parent_hwnd_raw: isize) {
     let frame_duration = Duration::from_secs_f64(1.0 / config.display.fps as f64);
 
     // Get parent window client size
-    let (width, height) = unsafe {
+    let (width, height) = {
         let mut rect = RECT::default();
-        let _ = GetClientRect(parent, &mut rect);
+        if unsafe { GetClientRect(parent, &mut rect) }.is_err() {
+            return;
+        }
         let w = (rect.right - rect.left).max(1) as u32;
         let h = (rect.bottom - rect.top).max(1) as u32;
         (w, h)
@@ -95,6 +97,7 @@ pub fn run(parent_hwnd_raw: isize) {
                 break;
             }
             if msg.message == WM_QUIT {
+                unsafe { DestroyWindow(hwnd).ok() };
                 return;
             }
             unsafe {
