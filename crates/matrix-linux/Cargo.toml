@@ -1,0 +1,23 @@
+[package]
+name = "matrix-linux"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "matrix-screensaver"
+path = "src/main.rs"
+
+[dependencies]
+matrix-core = { path = "../matrix-core" }
+smithay-client-toolkit = { version = "0.18", features = ["calloop"] }
+wayland-client = "0.31"
+wayland-backend = { version = "0.3", features = ["client_system"] }
+wayland-protocols = { version = "0.32", features = ["client", "staging"] }
+wayland-protocols-wlr = { version = "0.2", features = ["client"] }
+calloop = "0.13"
+calloop-wayland-source = "0.3"
+raw-window-handle = "0.6"
+wgpu = "0.20"
+pollster = "0.3"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
