@@ -34,7 +34,8 @@ fn main() {
     };
 
     let charset = get_charset(&config.rain.charset);
-    let atlas = Arc::new(GlyphAtlas::build(&charset, config.display.font_size, &font_family));
+    let font_bytes = font::find_font(&font_family);
+    let atlas = Arc::new(GlyphAtlas::build(&charset, config.display.font_size, &font_bytes));
     let frame_duration = Duration::from_secs_f64(1.0 / config.display.fps as f64);
 
     // Debug overlay: build fixed ASCII atlas + spawn stats poller
@@ -44,7 +45,8 @@ fn main() {
             let debug_chars: Vec<char> = (0x20u8..=0x7eu8).map(|b| b as char)
                 .chain(['█', '░'])
                 .collect();
-            let da = Arc::new(GlyphAtlas::build(&debug_chars, 14.0, &config.display.font));
+            let debug_font_bytes = font::find_font(&config.display.font);
+            let da = Arc::new(GlyphAtlas::build(&debug_chars, 14.0, &debug_font_bytes));
             let ds = start_stats_poller(gpu_hint.clone());
             (Some(da), Some(ds))
         } else {
