@@ -33,8 +33,6 @@ pub enum AppEvent {
     Idle,
     /// User activity detected while idle — hide the screensaver.
     Resume,
-    /// Any key/button pressed while the screensaver is active — dismiss.
-    Dismiss,
     /// Compositor sent a new surface size for surface at given index.
     Resize(usize, u32, u32),
 }

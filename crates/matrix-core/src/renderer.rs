@@ -79,6 +79,7 @@ struct RectParams {
 struct DebugResources {
     atlas: Arc<GlyphAtlas>,
     stats: Arc<Mutex<SystemStats>>,
+    #[allow(dead_code)] // kept alive for GPU bind group lifetime
     uniform_buf: wgpu::Buffer,
     bind_group: wgpu::BindGroup,
     instance_buf: wgpu::Buffer,
@@ -96,6 +97,7 @@ pub struct Renderer {
 
     rain_pipeline: wgpu::RenderPipeline,
     rain_bind_group: wgpu::BindGroup,
+    #[allow(dead_code)] // kept alive for GPU bind group lifetime
     rain_uniform_buf: wgpu::Buffer,
 
     instance_buf: wgpu::Buffer,

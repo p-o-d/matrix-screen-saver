@@ -101,8 +101,8 @@ fn main() {
                     rains.resize_with(n, Vec::new);
                     screensaver_active = true;
                 }
-                AppEvent::Resume | AppEvent::Dismiss if screensaver_active => {
-                    tracing::info!("resume/dismiss: deactivating screensaver");
+                AppEvent::Resume if screensaver_active => {
+                    tracing::info!("resume: deactivating screensaver");
                     app_state.destroy_layer_surfaces();
                     renderers.clear();
                     rains.clear();
