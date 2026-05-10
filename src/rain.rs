@@ -113,9 +113,9 @@ impl RainSimulator {
             }
         }
 
-        let charset = self.charset.clone();
         let rng = &mut self.rng;
         let rows = self.rows;
+        let charset = &self.charset;
         self.drops.retain_mut(|drop| {
             drop.head_row += drop.speed * delta;
             drop.mutation_timer += delta;

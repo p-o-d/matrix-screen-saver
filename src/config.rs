@@ -24,6 +24,7 @@ pub struct DisplayConfig {
     pub fps: u32,
     pub scanlines: bool,
     pub scanline_intensity: f32,
+    pub chromatic_aberration: f32,
     pub debug_overlay: bool,
 }
 
@@ -35,6 +36,7 @@ impl Default for DisplayConfig {
             fps: 60,
             scanlines: true,
             scanline_intensity: 0.25,
+            chromatic_aberration: 0.003,
             debug_overlay: false,
         }
     }

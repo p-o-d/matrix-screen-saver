@@ -62,7 +62,8 @@ struct BlurParams {
 struct ScanlineParams {
     intensity: f32,
     width: u32,
-    _pad: [u32; 2],
+    chromatic_aberration: f32,
+    _pad: u32,
 }
 
 #[repr(C)]
@@ -98,6 +99,8 @@ pub struct Renderer {
 
     instance_buf: wgpu::Buffer,
     max_instances: usize,
+    instances_scratch: Vec<Instance>,   // reused each frame to avoid per-frame alloc
+    debug_instances_scratch: Vec<Instance>,
 
     // Glow resources
     offscreen_view: wgpu::TextureView,
@@ -132,14 +135,17 @@ fn build_debug_instances(
     screen_w: u32,
     _screen_h: u32,
     fps: f32,
-) -> (Vec<Instance>, [f32; 4]) {
+    gpu_name: &str,
+    out: &mut Vec<Instance>,
+) -> [f32; 4] {
     fn bar(pct: f32) -> String {
         let n = ((pct / 100.0 * 10.0).round() as usize).min(10);
         format!("{}{}", "█".repeat(n), "░".repeat(10 - n))
     }
     let ram_pct = if stats.ram_total_gb > 0.0 { stats.ram_used_gb / stats.ram_total_gb * 100.0 } else { 0.0 };
     let vram_pct = if stats.vram_total_gb > 0.0 { stats.vram_used_gb / stats.vram_total_gb * 100.0 } else { 0.0 };
-    let lines: [String; 5] = [
+    let lines: [String; 6] = [
+        format!(" {}", gpu_name),
         format!(" FPS  {:3.0}", fps),
         format!(" RAM  {}  {:4.1}/{:4.1}GB", bar(ram_pct), stats.ram_used_gb, stats.ram_total_gb),
         format!(" CPU  {}  {:3.0}%", bar(stats.cpu_pct), stats.cpu_pct),
@@ -157,12 +163,11 @@ fn build_debug_instances(
     let panel_y = margin;
     let text_x = panel_x + pad;
     let text_y = panel_y + pad;
-    let rect = [panel_x, panel_y, panel_w, panel_h];
-    let mut instances = Vec::new();
+    out.clear();
     for (row, line) in lines.iter().enumerate() {
         for (col, glyph) in line.chars().enumerate() {
             let uv = atlas.uv_for_char(glyph);
-            instances.push(Instance {
+            out.push(Instance {
                 position: [text_x + col as f32 * cw, text_y + row as f32 * ch],
                 atlas_rect: uv,
                 brightness: 1.0,
@@ -171,7 +176,7 @@ fn build_debug_instances(
             });
         }
     }
-    (instances, rect)
+    [panel_x, panel_y, panel_w, panel_h]
 }
 
 impl Renderer {
@@ -567,7 +572,8 @@ impl Renderer {
             contents: bytemuck::bytes_of(&ScanlineParams {
                 intensity: config.display.scanline_intensity,
                 width: ((config.display.font_size / 18.0).round() as u32).max(1),
-                _pad: [0; 2],
+                chromatic_aberration: config.display.chromatic_aberration,
+                _pad: 0,
             }),
             usage: wgpu::BufferUsages::UNIFORM,
         });
@@ -759,12 +765,14 @@ impl Renderer {
             blend_pipeline, copy_bind_group, glow_bind_group,
             bg_color, glow_enabled: config.colors.glow,
             scanline_pipeline, scanline_bind_group,
-            scanline_enabled: config.display.scanlines,
+            scanline_enabled: config.display.scanlines || config.display.chromatic_aberration > 0.0,
             debug,
             width, height, atlas,
             adapter_info,
             fps: 0.0,
             last_render: None,
+            instances_scratch: Vec::with_capacity(max_instances),
+            debug_instances_scratch: Vec::with_capacity(512),
         }
     }
 
@@ -803,15 +811,16 @@ impl Renderer {
         let ch = self.atlas.cell_height as f32;
 
         // Build instance buffer: all depth layers far→near (painter's algorithm).
-        let mut instances: Vec<Instance> = Vec::new();
+        self.instances_scratch.clear();
         for layer in layers {
             let lcw = cw * layer.scale;
             let lch = ch * layer.scale;
             for (row_idx, row) in layer.cells.iter().enumerate() {
                 for (col_idx, cell) in row.iter().enumerate() {
                     if cell.brightness < 0.01 { continue; }
+                    if self.instances_scratch.len() == self.max_instances { break; }
                     let uv = self.atlas.uv_for_char(cell.ch);
-                    instances.push(Instance {
+                    self.instances_scratch.push(Instance {
                         position: [col_idx as f32 * lcw, row_idx as f32 * lch],
                         atlas_rect: uv,
                         brightness: (cell.brightness * layer.brightness_mult).min(1.0),
@@ -821,21 +830,24 @@ impl Renderer {
                 }
             }
         }
-        instances.truncate(self.max_instances);
 
-        if !instances.is_empty() {
+        if !self.instances_scratch.is_empty() {
             self.queue.write_buffer(
                 &self.instance_buf,
                 0,
-                bytemuck::cast_slice(&instances),
+                bytemuck::cast_slice(&self.instances_scratch),
             );
         }
 
         // Update debug overlay buffers
         let dbg_count: u32 = if let Some(ref mut debug) = self.debug {
             if let Ok(stats) = debug.stats.try_lock() {
-                let (dbg_instances, rect) = build_debug_instances(&stats, &debug.atlas, self.width, self.height, self.fps);
-                let count = (dbg_instances.len().min(512)) as u32;
+                let rect = build_debug_instances(
+                    &stats, &debug.atlas, self.width, self.height, self.fps,
+                    &self.adapter_info.name,
+                    &mut self.debug_instances_scratch,
+                );
+                let count = (self.debug_instances_scratch.len().min(512)) as u32;
                 if count > 0 {
                     let rect_params = RectParams {
                         rect,
@@ -844,7 +856,7 @@ impl Renderer {
                         color: [0.0, 0.0, 0.0, 0.75],
                     };
                     self.queue.write_buffer(&debug.rect_uniform_buf, 0, bytemuck::bytes_of(&rect_params));
-                    self.queue.write_buffer(&debug.instance_buf, 0, bytemuck::cast_slice(&dbg_instances[..count as usize]));
+                    self.queue.write_buffer(&debug.instance_buf, 0, bytemuck::cast_slice(&self.debug_instances_scratch[..count as usize]));
                 }
                 debug.instance_count = count;
                 count
@@ -872,11 +884,11 @@ impl Renderer {
                     })],
                     ..Default::default()
                 });
-                if !instances.is_empty() {
+                if !self.instances_scratch.is_empty() {
                     pass.set_pipeline(&self.rain_pipeline);
                     pass.set_bind_group(0, &self.rain_bind_group, &[]);
                     pass.set_vertex_buffer(0, self.instance_buf.slice(..));
-                    pass.draw(0..6, 0..instances.len() as u32);
+                    pass.draw(0..6, 0..self.instances_scratch.len() as u32);
                 }
                 if dbg_count > 0 {
                     if let Some(debug) = &self.debug {
@@ -964,11 +976,11 @@ impl Renderer {
                     })],
                     ..Default::default()
                 });
-                if !instances.is_empty() {
+                if !self.instances_scratch.is_empty() {
                     pass.set_pipeline(&self.rain_pipeline);
                     pass.set_bind_group(0, &self.rain_bind_group, &[]);
                     pass.set_vertex_buffer(0, self.instance_buf.slice(..));
-                    pass.draw(0..6, 0..instances.len() as u32);
+                    pass.draw(0..6, 0..self.instances_scratch.len() as u32);
                 }
                 if dbg_count > 0 {
                     if let Some(debug) = &self.debug {
@@ -1010,11 +1022,11 @@ impl Renderer {
                 })],
                 ..Default::default()
             });
-            if !instances.is_empty() {
+            if !self.instances_scratch.is_empty() {
                 pass.set_pipeline(&self.rain_pipeline);
                 pass.set_bind_group(0, &self.rain_bind_group, &[]);
                 pass.set_vertex_buffer(0, self.instance_buf.slice(..));
-                pass.draw(0..6, 0..instances.len() as u32);
+                pass.draw(0..6, 0..self.instances_scratch.len() as u32);
             }
             if dbg_count > 0 {
                 if let Some(debug) = &self.debug {
