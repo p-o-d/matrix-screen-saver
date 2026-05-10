@@ -27,6 +27,7 @@ use windows::core::PCWSTR;
 /// Global mutable state shared between the WndProc and the event loop.
 /// We use a raw static to avoid passing it through the lparam/userdata dance for simplicity.
 static mut MOUSE_START: (i32, i32) = (0, 0);
+static mut MOUSE_INITIALIZED: bool = false;
 static mut MOUSE_MOVED_FAR: bool = false;
 static mut SHOULD_QUIT: bool = false;
 
@@ -45,13 +46,13 @@ unsafe extern "system" fn wnd_proc(
         WM_MOUSEMOVE => {
             let x = (lparam.0 & 0xFFFF) as i16 as i32;
             let y = ((lparam.0 >> 16) & 0xFFFF) as i16 as i32;
-            let dx = x - MOUSE_START.0;
-            let dy = y - MOUSE_START.1;
-            if !MOUSE_MOVED_FAR {
-                // Initialise start position on first move
-                if MOUSE_START == (0, 0) {
-                    MOUSE_START = (x, y);
-                } else if dx * dx + dy * dy > 10 * 10 {
+            if !MOUSE_INITIALIZED {
+                MOUSE_START = (x, y);
+                MOUSE_INITIALIZED = true;
+            } else if !MOUSE_MOVED_FAR {
+                let dx = x - MOUSE_START.0;
+                let dy = y - MOUSE_START.1;
+                if dx * dx + dy * dy > 10 * 10 {
                     MOUSE_MOVED_FAR = true;
                     SHOULD_QUIT = true;
                     PostQuitMessage(0);
