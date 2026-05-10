@@ -3,7 +3,7 @@ mod imp {
     use matrix_core::config::{CharsetKind, Config};
     use windows::core::{w, PCWSTR};
     use windows::Win32::Foundation::{COLORREF, HWND, LPARAM, LRESULT, WPARAM};
-    use windows::Win32::Graphics::Gdi::{GetStockObject, DEFAULT_GUI_FONT, HBRUSH};
+    use windows::Win32::Graphics::Gdi::{GetStockObject, HBRUSH, WHITE_BRUSH};
     use windows::Win32::System::LibraryLoader::GetModuleHandleW;
     use windows::Win32::UI::Controls::{
         BST_CHECKED, BST_UNCHECKED, DLG_BUTTON_CHECK_STATE,
@@ -181,8 +181,10 @@ mod imp {
                         None,
                     );
                     if let Ok(hcb) = GetDlgItem(hwnd, IDC_FPS) {
-                        for item in ["30", "60", "120"] {
-                            let wide = to_wide(item);
+                        let fps_items: Vec<Vec<u16>> = ["30\0", "60\0", "120\0"]
+                            .iter().map(|s| s.encode_utf16().collect())
+                            .collect();
+                        for wide in &fps_items {
                             SendMessageW(hcb, CB_ADDSTRING, WPARAM(0), LPARAM(wide.as_ptr() as isize));
                         }
                         let sel: usize = match config.display.fps {
@@ -209,8 +211,10 @@ mod imp {
                         None,
                     );
                     if let Ok(hcb) = GetDlgItem(hwnd, IDC_CHARSET) {
-                        for item in ["Mixed", "Katakana", "Latin", "Binary"] {
-                            let wide = to_wide(item);
+                        let cs_items: Vec<Vec<u16>> = ["Mixed\0", "Katakana\0", "Latin\0", "Binary\0"]
+                            .iter().map(|s| s.encode_utf16().collect())
+                            .collect();
+                        for wide in &cs_items {
                             SendMessageW(hcb, CB_ADDSTRING, WPARAM(0), LPARAM(wide.as_ptr() as isize));
                         }
                         let sel: usize = match config.rain.charset {
@@ -389,7 +393,7 @@ mod imp {
                 lpfnWndProc: Some(wnd_proc),
                 hInstance: hinstance.into(),
                 lpszClassName: class_name,
-                hbrBackground: HBRUSH(GetStockObject(DEFAULT_GUI_FONT).0),
+                hbrBackground: HBRUSH(GetStockObject(WHITE_BRUSH).0),
                 hCursor: hcursor,
                 ..Default::default()
             };
