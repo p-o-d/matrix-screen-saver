@@ -43,10 +43,11 @@ jobs:
       - name: Install mingw-w64
         run: sudo apt-get update && sudo apt-get install -y mingw-w64
       - run: cargo build -p matrix-windows --target x86_64-pc-windows-gnu --release
+      - run: cp target/x86_64-pc-windows-gnu/release/matrix-screensaver.exe target/x86_64-pc-windows-gnu/release/matrix-screensaver.scr
       - uses: actions/upload-artifact@v4
         with:
           name: matrix-screensaver-windows-x86_64-cross
-          path: target/x86_64-pc-windows-gnu/release/matrix-screensaver.exe
+          path: target/x86_64-pc-windows-gnu/release/matrix-screensaver.scr
 
   windows-native:
     name: Build Windows (native)
@@ -56,7 +57,9 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - run: cargo build -p matrix-windows --release
+      - run: Copy-Item target/release/matrix-screensaver.exe target/release/matrix-screensaver.scr
+        shell: powershell
       - uses: actions/upload-artifact@v4
         with:
           name: matrix-screensaver-windows-x86_64-native
-          path: target/release/matrix-screensaver.exe
+          path: target/release/matrix-screensaver.scr
