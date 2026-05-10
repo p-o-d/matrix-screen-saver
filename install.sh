@@ -10,7 +10,7 @@ CONFIG_DIR="${HOME}/.config/matrix-screensaver"
 AUTOSTART_DIR="${HOME}/.config/autostart"
 
 echo "==> Building release binary..."
-cargo build --release
+cargo build -p matrix-linux --release
 
 echo "==> Installing binary to ${BINARY_DST}..."
 install -Dm755 "${BINARY_SRC}" "${BINARY_DST}"
