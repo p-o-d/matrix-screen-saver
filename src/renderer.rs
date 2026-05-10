@@ -1,7 +1,7 @@
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use bytemuck::{Pod, Zeroable};
 use wgpu::util::DeviceExt;
-use crate::{atlas::GlyphAtlas, config::Config, rain::CellState};
+use crate::{atlas::GlyphAtlas, config::Config, rain::CellState, stats::SystemStats};
 
 /// One depth plane passed to `Renderer::render()`.
 pub struct DepthLayer<'a> {
@@ -65,6 +65,27 @@ struct ScanlineParams {
     _pad: [u32; 2],
 }
 
+#[repr(C)]
+#[derive(Copy, Clone, Pod, Zeroable)]
+struct RectParams {
+    rect: [f32; 4],        // x, y, w, h in pixels
+    screen_size: [f32; 2],
+    _pad: [f32; 2],        // align color to 32-byte offset
+    color: [f32; 4],
+}
+
+struct DebugResources {
+    atlas: Arc<GlyphAtlas>,
+    stats: Arc<Mutex<SystemStats>>,
+    uniform_buf: wgpu::Buffer,
+    bind_group: wgpu::BindGroup,
+    instance_buf: wgpu::Buffer,
+    instance_count: u32,
+    rect_pipeline: wgpu::RenderPipeline,
+    rect_uniform_buf: wgpu::Buffer,
+    rect_bind_group: wgpu::BindGroup,
+}
+
 pub struct Renderer {
     pub device: wgpu::Device,
     pub queue: wgpu::Queue,
@@ -96,9 +117,56 @@ pub struct Renderer {
     scanline_pipeline: wgpu::RenderPipeline,
     scanline_bind_group: wgpu::BindGroup,
     scanline_enabled: bool,
+    debug: Option<DebugResources>,
     pub width: u32,
     pub height: u32,
     pub atlas: Arc<GlyphAtlas>,
+}
+
+fn build_debug_instances(
+    stats: &SystemStats,
+    atlas: &GlyphAtlas,
+    screen_w: u32,
+    _screen_h: u32,
+) -> (Vec<Instance>, [f32; 4]) {
+    fn bar(pct: f32) -> String {
+        let n = ((pct / 100.0 * 10.0).round() as usize).min(10);
+        format!("{}{}", "█".repeat(n), "░".repeat(10 - n))
+    }
+    let ram_pct = if stats.ram_total_gb > 0.0 { stats.ram_used_gb / stats.ram_total_gb * 100.0 } else { 0.0 };
+    let vram_pct = if stats.vram_total_gb > 0.0 { stats.vram_used_gb / stats.vram_total_gb * 100.0 } else { 0.0 };
+    let lines: [String; 4] = [
+        format!(" RAM  {}  {:4.1}/{:4.1}GB", bar(ram_pct), stats.ram_used_gb, stats.ram_total_gb),
+        format!(" CPU  {}  {:3.0}%", bar(stats.cpu_pct), stats.cpu_pct),
+        format!(" VRAM {}  {:4.1}/{:4.1}GB", bar(vram_pct), stats.vram_used_gb, stats.vram_total_gb),
+        format!(" GPU  {}  {:3.0}%", bar(stats.gpu_pct), stats.gpu_pct),
+    ];
+    let cw = atlas.cell_width as f32;
+    let ch = atlas.cell_height as f32;
+    let max_cols = lines.iter().map(|l| l.chars().count()).max().unwrap_or(0);
+    let pad = 8.0_f32;
+    let panel_w = max_cols as f32 * cw + pad * 2.0;
+    let panel_h = lines.len() as f32 * ch + pad * 2.0;
+    let margin = 12.0_f32;
+    let panel_x = screen_w as f32 - panel_w - margin;
+    let panel_y = margin;
+    let text_x = panel_x + pad;
+    let text_y = panel_y + pad;
+    let rect = [panel_x, panel_y, panel_w, panel_h];
+    let mut instances = Vec::new();
+    for (row, line) in lines.iter().enumerate() {
+        for (col, glyph) in line.chars().enumerate() {
+            let uv = atlas.uv_for_char(glyph);
+            instances.push(Instance {
+                position: [text_x + col as f32 * cw, text_y + row as f32 * ch],
+                atlas_rect: uv,
+                brightness: 1.0,
+                is_head: 0,
+                scale: 1.0,
+            });
+        }
+    }
+    (instances, rect)
 }
 
 impl Renderer {
@@ -109,6 +177,8 @@ impl Renderer {
         height: u32,
         atlas: Arc<GlyphAtlas>,
         config: &Config,
+        debug_atlas: Option<Arc<GlyphAtlas>>,
+        stats: Option<Arc<Mutex<SystemStats>>>,
     ) -> Self {
         use raw_window_handle::{
             RawDisplayHandle, RawWindowHandle,
@@ -545,6 +615,134 @@ impl Renderer {
             mapped_at_creation: false,
         });
 
+        // ── Debug overlay resources ────────────────────────────────────────
+        let debug = if let (Some(dbg_atlas), Some(dbg_stats)) = (debug_atlas, stats) {
+            let primary_color = Config::parse_color(&config.colors.primary);
+
+            // Upload debug atlas texture (R8Unorm, same format as rain atlas)
+            let dbg_tex = device.create_texture(&wgpu::TextureDescriptor {
+                label: Some("debug_atlas"),
+                size: wgpu::Extent3d {
+                    width: dbg_atlas.atlas_width, height: dbg_atlas.atlas_height,
+                    depth_or_array_layers: 1,
+                },
+                mip_level_count: 1, sample_count: 1,
+                dimension: wgpu::TextureDimension::D2,
+                format: wgpu::TextureFormat::R8Unorm,
+                usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+                view_formats: &[],
+            });
+            queue.write_texture(
+                dbg_tex.as_image_copy(),
+                &dbg_atlas.data,
+                wgpu::ImageDataLayout {
+                    offset: 0,
+                    bytes_per_row: Some(dbg_atlas.atlas_width),
+                    rows_per_image: Some(dbg_atlas.atlas_height),
+                },
+                wgpu::Extent3d {
+                    width: dbg_atlas.atlas_width, height: dbg_atlas.atlas_height,
+                    depth_or_array_layers: 1,
+                },
+            );
+            let dbg_tex_view = dbg_tex.create_view(&Default::default());
+            let dbg_sampler = device.create_sampler(&wgpu::SamplerDescriptor {
+                mag_filter: wgpu::FilterMode::Linear,
+                min_filter: wgpu::FilterMode::Linear,
+                ..Default::default()
+            });
+
+            // Debug uniform buffer — RainUniform with debug cell dimensions
+            let dbg_uniform_buf = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some("debug_uniform"),
+                contents: bytemuck::bytes_of(&RainUniform {
+                    primary_color,
+                    screen_size: [width as f32, height as f32],
+                    cell_size: [dbg_atlas.cell_width as f32, dbg_atlas.cell_height as f32],
+                }),
+                usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+            });
+
+            // Debug bind group: same layout as rain_bgl (uniform + texture + sampler)
+            let dbg_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+                label: Some("debug_bg"), layout: &rain_bgl,
+                entries: &[
+                    wgpu::BindGroupEntry { binding: 0, resource: dbg_uniform_buf.as_entire_binding() },
+                    wgpu::BindGroupEntry { binding: 1, resource: wgpu::BindingResource::TextureView(&dbg_tex_view) },
+                    wgpu::BindGroupEntry { binding: 2, resource: wgpu::BindingResource::Sampler(&dbg_sampler) },
+                ],
+            });
+
+            // Debug instance buffer — fixed 512 slots (~14 KB)
+            let dbg_instance_buf = device.create_buffer(&wgpu::BufferDescriptor {
+                label: Some("debug_instance_buf"),
+                size: (512 * std::mem::size_of::<Instance>()) as u64,
+                usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
+                mapped_at_creation: false,
+            });
+
+            // Rect pipeline — solid colored background quad, alpha blended
+            let rect_shader = device.create_shader_module(wgpu::include_wgsl!("shaders/rect.wgsl"));
+            let rect_bgl = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                label: Some("rect_bgl"),
+                entries: &[wgpu::BindGroupLayoutEntry {
+                    binding: 0, visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Uniform,
+                        has_dynamic_offset: false, min_binding_size: None,
+                    }, count: None,
+                }],
+            });
+            let rect_uniform_buf = device.create_buffer(&wgpu::BufferDescriptor {
+                label: Some("rect_uniform"),
+                size: std::mem::size_of::<RectParams>() as u64,
+                usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+                mapped_at_creation: false,
+            });
+            let rect_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+                label: Some("rect_bg"), layout: &rect_bgl,
+                entries: &[wgpu::BindGroupEntry {
+                    binding: 0, resource: rect_uniform_buf.as_entire_binding(),
+                }],
+            });
+            let rect_pl = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                label: Some("rect_pl"), bind_group_layouts: &[&rect_bgl], push_constant_ranges: &[],
+            });
+            let rect_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+                label: Some("rect_pipeline"), layout: Some(&rect_pl),
+                vertex: wgpu::VertexState {
+                    module: &rect_shader, entry_point: "vs_main",
+                    compilation_options: Default::default(), buffers: &[],
+                },
+                fragment: Some(wgpu::FragmentState {
+                    module: &rect_shader, entry_point: "fs_main",
+                    compilation_options: Default::default(),
+                    targets: &[Some(wgpu::ColorTargetState {
+                        format, blend: Some(wgpu::BlendState::ALPHA_BLENDING),
+                        write_mask: wgpu::ColorWrites::ALL,
+                    })],
+                }),
+                primitive: wgpu::PrimitiveState::default(),
+                depth_stencil: None,
+                multisample: wgpu::MultisampleState::default(),
+                multiview: None,
+            });
+
+            Some(DebugResources {
+                atlas: dbg_atlas,
+                stats: dbg_stats,
+                uniform_buf: dbg_uniform_buf,
+                bind_group: dbg_bind_group,
+                instance_buf: dbg_instance_buf,
+                instance_count: 0,
+                rect_pipeline,
+                rect_uniform_buf,
+                rect_bind_group,
+            })
+        } else {
+            None
+        };
+
         Self {
             device, queue, surface, surface_config,
             rain_pipeline, rain_bind_group, rain_uniform_buf,
@@ -555,6 +753,7 @@ impl Renderer {
             bg_color, glow_enabled: config.colors.glow,
             scanline_pipeline, scanline_bind_group,
             scanline_enabled: config.display.scanlines,
+            debug,
             width, height, atlas,
         }
     }
@@ -612,6 +811,30 @@ impl Renderer {
             );
         }
 
+        // Update debug overlay buffers
+        let dbg_count: u32 = if let Some(ref mut debug) = self.debug {
+            if let Ok(stats) = debug.stats.try_lock() {
+                let (dbg_instances, rect) = build_debug_instances(&stats, &debug.atlas, self.width, self.height);
+                let count = (dbg_instances.len().min(512)) as u32;
+                if count > 0 {
+                    let rect_params = RectParams {
+                        rect,
+                        screen_size: [self.width as f32, self.height as f32],
+                        _pad: [0.0; 2],
+                        color: [0.0, 0.0, 0.0, 0.75],
+                    };
+                    self.queue.write_buffer(&debug.rect_uniform_buf, 0, bytemuck::bytes_of(&rect_params));
+                    self.queue.write_buffer(&debug.instance_buf, 0, bytemuck::cast_slice(&dbg_instances[..count as usize]));
+                }
+                debug.instance_count = count;
+                count
+            } else {
+                debug.instance_count
+            }
+        } else {
+            0
+        };
+
         let clear_bg = wgpu::Operations {
             load: wgpu::LoadOp::Clear(self.bg_color),
             store: wgpu::StoreOp::Store,
@@ -634,6 +857,17 @@ impl Renderer {
                     pass.set_bind_group(0, &self.rain_bind_group, &[]);
                     pass.set_vertex_buffer(0, self.instance_buf.slice(..));
                     pass.draw(0..6, 0..instances.len() as u32);
+                }
+                if dbg_count > 0 {
+                    if let Some(debug) = &self.debug {
+                        pass.set_pipeline(&debug.rect_pipeline);
+                        pass.set_bind_group(0, &debug.rect_bind_group, &[]);
+                        pass.draw(0..6, 0..1);
+                        pass.set_pipeline(&self.rain_pipeline);
+                        pass.set_bind_group(0, &debug.bind_group, &[]);
+                        pass.set_vertex_buffer(0, debug.instance_buf.slice(..));
+                        pass.draw(0..6, 0..dbg_count);
+                    }
                 }
             }
 
@@ -716,6 +950,17 @@ impl Renderer {
                     pass.set_vertex_buffer(0, self.instance_buf.slice(..));
                     pass.draw(0..6, 0..instances.len() as u32);
                 }
+                if dbg_count > 0 {
+                    if let Some(debug) = &self.debug {
+                        pass.set_pipeline(&debug.rect_pipeline);
+                        pass.set_bind_group(0, &debug.rect_bind_group, &[]);
+                        pass.draw(0..6, 0..1);
+                        pass.set_pipeline(&self.rain_pipeline);
+                        pass.set_bind_group(0, &debug.bind_group, &[]);
+                        pass.set_vertex_buffer(0, debug.instance_buf.slice(..));
+                        pass.draw(0..6, 0..dbg_count);
+                    }
+                }
             }
             {
                 let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
@@ -750,6 +995,17 @@ impl Renderer {
                 pass.set_bind_group(0, &self.rain_bind_group, &[]);
                 pass.set_vertex_buffer(0, self.instance_buf.slice(..));
                 pass.draw(0..6, 0..instances.len() as u32);
+            }
+            if dbg_count > 0 {
+                if let Some(debug) = &self.debug {
+                    pass.set_pipeline(&debug.rect_pipeline);
+                    pass.set_bind_group(0, &debug.rect_bind_group, &[]);
+                    pass.draw(0..6, 0..1);
+                    pass.set_pipeline(&self.rain_pipeline);
+                    pass.set_bind_group(0, &debug.bind_group, &[]);
+                    pass.set_vertex_buffer(0, debug.instance_buf.slice(..));
+                    pass.draw(0..6, 0..dbg_count);
+                }
             }
         }
 

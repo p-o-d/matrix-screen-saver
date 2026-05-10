@@ -1,4 +1,4 @@
-use std::sync::{Arc, mpsc};
+use std::sync::{Arc, Mutex, mpsc};
 use std::time::{Duration, Instant};
 use calloop::EventLoop;
 use calloop_wayland_source::WaylandSource;
@@ -9,6 +9,7 @@ use matrix_screensaver::chars::get_charset;
 use matrix_screensaver::rain::RainSimulator;
 use matrix_screensaver::atlas::GlyphAtlas;
 use matrix_screensaver::renderer::Renderer;
+use matrix_screensaver::stats::{SystemStats, start_stats_poller};
 use matrix_screensaver::wayland_app::{AppEvent, AppState};
 
 fn main() {
@@ -31,6 +32,19 @@ fn main() {
     let charset = get_charset(&config.rain.charset);
     let atlas = Arc::new(GlyphAtlas::build(&charset, config.display.font_size, &font_family));
     let frame_duration = Duration::from_secs_f64(1.0 / config.display.fps as f64);
+
+    // Debug overlay: build fixed ASCII atlas + spawn stats poller
+    let (debug_atlas, debug_stats): (Option<Arc<GlyphAtlas>>, Option<Arc<Mutex<SystemStats>>>) =
+        if config.display.debug_overlay {
+            let debug_chars: Vec<char> = (0x20u8..=0x7eu8).map(|b| b as char)
+                .chain(['█', '░'])
+                .collect();
+            let da = Arc::new(GlyphAtlas::build(&debug_chars, 14.0, &config.display.font));
+            let ds = start_stats_poller();
+            (Some(da), Some(ds))
+        } else {
+            (None, None)
+        };
 
     // Wayland connection
     let conn = Connection::connect_to_env()
@@ -101,6 +115,7 @@ fn main() {
                         let surface_ptr = get_surface_ptr(&app_state.surfaces[idx].wl_surface);
                         let r = pollster::block_on(Renderer::new(
                             display_ptr, surface_ptr, w, h, atlas.clone(), &config,
+                            debug_atlas.clone(), debug_stats.clone(),
                         ));
                         rains[idx] = screen_rains;
                         renderers[idx] = Some(r);
