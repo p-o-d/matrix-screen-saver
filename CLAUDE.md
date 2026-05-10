@@ -1,4 +1,4 @@
-# CLAUDE.md — matrix-screen-saver-kde
+# CLAUDE.md — matrix-screen-saver
 
 ## What this is
 
