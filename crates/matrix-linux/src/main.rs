@@ -118,10 +118,12 @@ fn main() {
                         r.resize(w, h);
                         rains[idx] = screen_rains;
                     } else if app_state.surfaces.get(idx).map_or(false, |s| s.configured) {
-                        let display_ptr = get_display_ptr(&conn);
-                        let surface_ptr = get_surface_ptr(&app_state.surfaces[idx].wl_surface);
+                        let (wgpu_instance, wgpu_surface) = create_wgpu_surface(
+                            &conn,
+                            &app_state.surfaces[idx].wl_surface,
+                        );
                         let r = pollster::block_on(Renderer::new(
-                            display_ptr, surface_ptr, w, h, atlas.clone(), &config,
+                            wgpu_instance, wgpu_surface, w, h, atlas.clone(), &config,
                             debug_atlas.clone(), debug_stats.clone(),
                         ));
                         if debug_stats.is_some() {
@@ -253,21 +255,38 @@ fn try_subscribe_idle(
     }
 }
 
-/// Get the raw `wl_display` pointer from the Wayland connection.
-///
-/// Requires `wayland-backend` with the `client_system` feature (which links against
-/// libwayland-client and exposes the underlying C pointer).
-fn get_display_ptr(conn: &Connection) -> *mut std::ffi::c_void {
-    conn.backend().display_ptr() as *mut std::ffi::c_void
-}
-
-/// Get the raw `wl_proxy` pointer for a `wl_surface`.
-///
-/// `ObjectId::as_ptr()` is available when the `client_system` feature of
-/// `wayland-backend` is enabled.
-fn get_surface_ptr(
+fn create_wgpu_surface(
+    conn: &Connection,
     wl_surface: &wayland_client::protocol::wl_surface::WlSurface,
-) -> *mut std::ffi::c_void {
-    use wayland_client::Proxy;
-    wl_surface.id().as_ptr() as *mut std::ffi::c_void
+) -> (wgpu::Instance, wgpu::Surface<'static>) {
+    use raw_window_handle::{
+        RawDisplayHandle, RawWindowHandle,
+        WaylandDisplayHandle, WaylandWindowHandle,
+    };
+    use std::ptr::NonNull;
+
+    let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
+        backends: wgpu::Backends::VULKAN | wgpu::Backends::GL,
+        ..Default::default()
+    });
+
+    let display_ptr = conn.backend().display_ptr() as *mut std::ffi::c_void;
+    let surface_ptr = {
+        use wayland_client::Proxy;
+        wl_surface.id().as_ptr() as *mut std::ffi::c_void
+    };
+
+    let surface = unsafe {
+        instance.create_surface_unsafe(wgpu::SurfaceTargetUnsafe::RawHandle {
+            raw_display_handle: RawDisplayHandle::Wayland(
+                WaylandDisplayHandle::new(NonNull::new(display_ptr).unwrap()),
+            ),
+            raw_window_handle: RawWindowHandle::Wayland(
+                WaylandWindowHandle::new(NonNull::new(surface_ptr).unwrap()),
+            ),
+        })
+    }
+    .expect("wgpu surface creation failed");
+
+    (instance, surface)
 }

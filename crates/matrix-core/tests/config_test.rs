@@ -1,4 +1,4 @@
-use matrix_screensaver::config::{Config, CharsetKind};
+use matrix_core::config::{Config, CharsetKind};
 
 #[test]
 fn default_config_has_expected_values() {

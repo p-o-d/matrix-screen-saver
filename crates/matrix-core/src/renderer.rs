@@ -209,8 +209,8 @@ fn build_debug_instances(
 
 impl Renderer {
     pub async fn new(
-        display_ptr: *mut std::ffi::c_void,
-        surface_ptr: *mut std::ffi::c_void,
+        instance: wgpu::Instance,
+        surface: wgpu::Surface<'static>,
         width: u32,
         height: u32,
         atlas: Arc<GlyphAtlas>,
@@ -218,28 +218,6 @@ impl Renderer {
         debug_atlas: Option<Arc<GlyphAtlas>>,
         stats: Option<Arc<Mutex<SystemStats>>>,
     ) -> Self {
-        use raw_window_handle::{
-            RawDisplayHandle, RawWindowHandle,
-            WaylandDisplayHandle, WaylandWindowHandle,
-        };
-        use std::ptr::NonNull;
-
-        let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
-            backends: wgpu::Backends::VULKAN | wgpu::Backends::GL,
-            ..Default::default()
-        });
-
-        let surface = unsafe {
-            instance.create_surface_unsafe(wgpu::SurfaceTargetUnsafe::RawHandle {
-                raw_display_handle: RawDisplayHandle::Wayland(
-                    WaylandDisplayHandle::new(NonNull::new(display_ptr).unwrap()),
-                ),
-                raw_window_handle: RawWindowHandle::Wayland(
-                    WaylandWindowHandle::new(NonNull::new(surface_ptr).unwrap()),
-                ),
-            })
-        }.expect("wgpu surface creation failed");
-
         let adapter = instance
             .request_adapter(&wgpu::RequestAdapterOptions {
                 power_preference: wgpu::PowerPreference::LowPower,

@@ -784,21 +784,32 @@ dependencies = [
 ]
 
 [[package]]
-name = "matrix-screensaver"
+name = "matrix-core"
 version = "0.1.0"
 dependencies = [
  "bytemuck",
- "calloop 0.13.0",
- "calloop-wayland-source 0.3.0",
  "dirs",
  "fontdue",
  "pollster",
  "rand",
  "raw-window-handle",
  "serde",
- "smithay-client-toolkit",
  "tempfile",
  "toml",
+ "tracing",
+ "wgpu",
+]
+
+[[package]]
+name = "matrix-linux"
+version = "0.1.0"
+dependencies = [
+ "calloop 0.13.0",
+ "calloop-wayland-source 0.3.0",
+ "matrix-core",
+ "pollster",
+ "raw-window-handle",
+ "smithay-client-toolkit",
  "tracing",
  "tracing-subscriber",
  "wayland-backend",
@@ -807,6 +818,10 @@ dependencies = [
  "wayland-protocols-wlr",
  "wgpu",
 ]
+
+[[package]]
+name = "matrix-windows"
+version = "0.1.0"
 
 [[package]]
 name = "memchr"

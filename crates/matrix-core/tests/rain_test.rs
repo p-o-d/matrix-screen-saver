@@ -1,4 +1,4 @@
-use matrix_screensaver::{chars::get_charset, config::CharsetKind};
+use matrix_core::{chars::get_charset, config::CharsetKind};
 
 #[test]
 fn katakana_charset_has_correct_range() {
@@ -33,7 +33,7 @@ fn mixed_charset_contains_all() {
     assert!(chars.contains(&'0'));
 }
 
-use matrix_screensaver::{
+use matrix_core::{
     config::RainConfig,
     rain::RainSimulator,
 };
