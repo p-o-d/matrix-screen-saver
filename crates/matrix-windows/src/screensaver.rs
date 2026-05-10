@@ -164,7 +164,7 @@ pub fn run() {
     };
 
     unsafe {
-        ShowWindow(hwnd, SW_SHOW);
+        let _ = ShowWindow(hwnd, SW_SHOW);
     }
 
     // Determine actual client rect (may differ from screen_w/h in theory)
@@ -231,7 +231,7 @@ pub fn run() {
                 return;
             }
             unsafe {
-                TranslateMessage(&msg);
+                let _ = TranslateMessage(&msg);
                 DispatchMessageW(&msg);
             }
         }

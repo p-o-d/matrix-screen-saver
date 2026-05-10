@@ -338,7 +338,7 @@ mod imp {
                         lStructSize: std::mem::size_of::<CHOOSECOLORW>() as u32,
                         hwndOwner: hwnd,
                         rgbResult: CUSTOM_COLORS[0],
-                        lpCustColors: CUSTOM_COLORS.as_mut_ptr(),
+                        lpCustColors: std::ptr::addr_of_mut!(CUSTOM_COLORS) as *mut _,
                         Flags: CC_FULLOPEN | CC_RGBINIT,
                         ..Default::default()
                     };
@@ -397,11 +397,11 @@ mod imp {
                 Err(_) => return,
             };
 
-            ShowWindow(hwnd, SW_SHOW);
+            let _ = ShowWindow(hwnd, SW_SHOW);
 
             let mut msg = MSG::default();
             while GetMessageW(&mut msg, None, 0, 0).as_bool() {
-                TranslateMessage(&msg);
+                let _ = TranslateMessage(&msg);
                 DispatchMessageW(&msg);
             }
         }

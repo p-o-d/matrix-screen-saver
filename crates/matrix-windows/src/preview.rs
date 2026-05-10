@@ -101,7 +101,7 @@ pub fn run(parent_hwnd_raw: isize) {
                 return;
             }
             unsafe {
-                TranslateMessage(&msg);
+                let _ = TranslateMessage(&msg);
                 DispatchMessageW(&msg);
             }
         }
