@@ -1,23 +1,24 @@
-use std::path::PathBuf;
-
-/// Resolve a font family name to font file bytes using fc-match.
 pub fn find_font(family: &str) -> Vec<u8> {
-    let path = resolve_path(family);
-    std::fs::read(&path)
-        .unwrap_or_else(|e| panic!("cannot read font '{}': {e}", path.display()))
+    match try_find_font(family) {
+        Ok(bytes) => bytes,
+        Err(e) => {
+            eprintln!("matrix-screensaver: cannot find font '{}': {}", family, e);
+            eprintln!("Install fontconfig and ensure a monospace font is available.");
+            std::process::exit(1);
+        }
+    }
 }
 
-fn resolve_path(family: &str) -> PathBuf {
+fn try_find_font(family: &str) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
     let output = std::process::Command::new("fc-match")
         .args([family, "--format=%{file}"])
-        .output()
-        .expect("fc-match not found — install fontconfig (pacman -S fontconfig)");
+        .output()?;
     if !output.status.success() {
-        panic!("fc-match failed for family '{family}'");
+        return Err(format!("fc-match exited with status {}", output.status).into());
     }
-    let path = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    let path = std::str::from_utf8(&output.stdout)?.trim().to_string();
     if path.is_empty() {
-        panic!("fc-match returned empty path for family '{family}'");
+        return Err("fc-match returned empty path".into());
     }
-    PathBuf::from(path)
+    Ok(std::fs::read(&path)?)
 }

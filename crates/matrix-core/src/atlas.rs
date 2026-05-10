@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use fontdue::{Font, FontSettings};
 
 pub struct GlyphAtlas {
@@ -8,6 +9,7 @@ pub struct GlyphAtlas {
     pub cell_height: u32,
     pub uvs: Vec<[f32; 4]>,
     pub chars: Vec<char>,
+    char_index: HashMap<char, usize>,
 }
 
 impl GlyphAtlas {
@@ -50,6 +52,12 @@ impl GlyphAtlas {
             uvs.push([u, 0.0f32, cell_width as f32 / atlas_width as f32, 1.0f32]);
         }
 
+        let char_index: HashMap<char, usize> = chars
+            .iter()
+            .enumerate()
+            .map(|(i, &c)| (c, i))
+            .collect();
+
         Self {
             data: atlas_data,
             atlas_width,
@@ -58,14 +66,14 @@ impl GlyphAtlas {
             cell_height,
             uvs,
             chars: chars.to_vec(),
+            char_index,
         }
     }
 
     pub fn uv_for_char(&self, ch: char) -> [f32; 4] {
-        self.chars
-            .iter()
-            .position(|&c| c == ch)
-            .map(|i| self.uvs[i])
+        self.char_index
+            .get(&ch)
+            .map(|&i| self.uvs[i])
             .unwrap_or_else(|| self.uvs.first().copied().unwrap_or([0.0; 4]))
     }
 }

@@ -1,3 +1,4 @@
+#[cfg(unix)]
 #[test]
 fn build_atlas_from_bytes() {
     let font_bytes = std::fs::read("/usr/share/fonts/TTF/DejaVuSansMono.ttf")
