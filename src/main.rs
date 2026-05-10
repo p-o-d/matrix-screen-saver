@@ -9,7 +9,7 @@ use matrix_screensaver::chars::get_charset;
 use matrix_screensaver::rain::RainSimulator;
 use matrix_screensaver::atlas::GlyphAtlas;
 use matrix_screensaver::renderer::Renderer;
-use matrix_screensaver::stats::{SystemStats, start_stats_poller};
+use matrix_screensaver::stats::{GpuSpec, SystemStats, start_stats_poller};
 use matrix_screensaver::wayland_app::{AppEvent, AppState};
 
 fn main() {
@@ -34,13 +34,14 @@ fn main() {
     let frame_duration = Duration::from_secs_f64(1.0 / config.display.fps as f64);
 
     // Debug overlay: build fixed ASCII atlas + spawn stats poller
+    let gpu_hint: Arc<Mutex<Option<GpuSpec>>> = Arc::new(Mutex::new(None));
     let (debug_atlas, debug_stats): (Option<Arc<GlyphAtlas>>, Option<Arc<Mutex<SystemStats>>>) =
         if config.display.debug_overlay {
             let debug_chars: Vec<char> = (0x20u8..=0x7eu8).map(|b| b as char)
                 .chain(['█', '░'])
                 .collect();
             let da = Arc::new(GlyphAtlas::build(&debug_chars, 14.0, &config.display.font));
-            let ds = start_stats_poller();
+            let ds = start_stats_poller(gpu_hint.clone());
             (Some(da), Some(ds))
         } else {
             (None, None)
@@ -117,6 +118,16 @@ fn main() {
                             display_ptr, surface_ptr, w, h, atlas.clone(), &config,
                             debug_atlas.clone(), debug_stats.clone(),
                         ));
+                        if debug_stats.is_some() {
+                            if let Ok(mut hint) = gpu_hint.lock() {
+                                if hint.is_none() {
+                                    *hint = Some(GpuSpec {
+                                        vendor: r.adapter_info.vendor,
+                                        device: r.adapter_info.device,
+                                    });
+                                }
+                            }
+                        }
                         rains[idx] = screen_rains;
                         renderers[idx] = Some(r);
                     }

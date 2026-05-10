@@ -121,6 +121,9 @@ pub struct Renderer {
     pub width: u32,
     pub height: u32,
     pub atlas: Arc<GlyphAtlas>,
+    pub adapter_info: wgpu::AdapterInfo,
+    fps: f32,
+    last_render: Option<std::time::Instant>,
 }
 
 fn build_debug_instances(
@@ -128,6 +131,7 @@ fn build_debug_instances(
     atlas: &GlyphAtlas,
     screen_w: u32,
     _screen_h: u32,
+    fps: f32,
 ) -> (Vec<Instance>, [f32; 4]) {
     fn bar(pct: f32) -> String {
         let n = ((pct / 100.0 * 10.0).round() as usize).min(10);
@@ -135,7 +139,8 @@ fn build_debug_instances(
     }
     let ram_pct = if stats.ram_total_gb > 0.0 { stats.ram_used_gb / stats.ram_total_gb * 100.0 } else { 0.0 };
     let vram_pct = if stats.vram_total_gb > 0.0 { stats.vram_used_gb / stats.vram_total_gb * 100.0 } else { 0.0 };
-    let lines: [String; 4] = [
+    let lines: [String; 5] = [
+        format!(" FPS  {:3.0}", fps),
         format!(" RAM  {}  {:4.1}/{:4.1}GB", bar(ram_pct), stats.ram_used_gb, stats.ram_total_gb),
         format!(" CPU  {}  {:3.0}%", bar(stats.cpu_pct), stats.cpu_pct),
         format!(" VRAM {}  {:4.1}/{:4.1}GB", bar(vram_pct), stats.vram_used_gb, stats.vram_total_gb),
@@ -210,6 +215,8 @@ impl Renderer {
             })
             .await
             .expect("no suitable GPU adapter found");
+
+        let adapter_info = adapter.get_info();
 
         let (device, queue) = adapter
             .request_device(&wgpu::DeviceDescriptor::default(), None)
@@ -755,6 +762,9 @@ impl Renderer {
             scanline_enabled: config.display.scanlines,
             debug,
             width, height, atlas,
+            adapter_info,
+            fps: 0.0,
+            last_render: None,
         }
     }
 
@@ -769,6 +779,16 @@ impl Renderer {
 
     /// Render one frame. `layers` are ordered far→near; near instances are drawn on top.
     pub fn render(&mut self, layers: &[DepthLayer<'_>]) {
+        let now = std::time::Instant::now();
+        if let Some(prev) = self.last_render {
+            let dt = now.duration_since(prev).as_secs_f32();
+            if dt > 0.0 {
+                let sample = 1.0 / dt;
+                self.fps = if self.fps == 0.0 { sample } else { self.fps * 0.9 + sample * 0.1 };
+            }
+        }
+        self.last_render = Some(now);
+
         let frame = match self.surface.get_current_texture() {
             Ok(f) => f,
             Err(e) => {
@@ -814,7 +834,7 @@ impl Renderer {
         // Update debug overlay buffers
         let dbg_count: u32 = if let Some(ref mut debug) = self.debug {
             if let Ok(stats) = debug.stats.try_lock() {
-                let (dbg_instances, rect) = build_debug_instances(&stats, &debug.atlas, self.width, self.height);
+                let (dbg_instances, rect) = build_debug_instances(&stats, &debug.atlas, self.width, self.height, self.fps);
                 let count = (dbg_instances.len().min(512)) as u32;
                 if count > 0 {
                     let rect_params = RectParams {
