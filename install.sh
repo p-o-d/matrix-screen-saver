@@ -4,8 +4,6 @@ set -euo pipefail
 BINARY_NAME="matrix-screensaver"
 BINARY_SRC="target/release/${BINARY_NAME}"
 BINARY_DST="${HOME}/.local/bin/${BINARY_NAME}"
-PLUGIN_SRC="kde-plugin/matrix-screensaver"
-PLUGIN_DST="${HOME}/.local/share/kscreenlocker/wallpapers/matrix-screensaver"
 CONFIG_DIR="${HOME}/.config/matrix-screensaver"
 AUTOSTART_DIR="${HOME}/.config/autostart"
 
@@ -14,10 +12,6 @@ cargo build -p matrix-linux --release
 
 echo "==> Installing binary to ${BINARY_DST}..."
 install -Dm755 "${BINARY_SRC}" "${BINARY_DST}"
-
-echo "==> Installing KDE plugin to ${PLUGIN_DST}..."
-mkdir -p "${PLUGIN_DST}"
-cp -r "${PLUGIN_SRC}/." "${PLUGIN_DST}/"
 
 echo "==> Writing default config (skipped if already exists)..."
 mkdir -p "${CONFIG_DIR}"
