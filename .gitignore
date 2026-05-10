@@ -1,3 +1,9 @@
 /target
 .superpowers/
 *.orig
+
+# IDE
+.idea/
+
+# Superpowers plugin state
+.superpowers/
