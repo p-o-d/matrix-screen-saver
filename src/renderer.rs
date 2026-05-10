@@ -1,5 +1,6 @@
 use std::sync::{Arc, Mutex};
 use bytemuck::{Pod, Zeroable};
+use rand::{rngs::SmallRng, Rng, SeedableRng};
 use wgpu::util::DeviceExt;
 use crate::{atlas::GlyphAtlas, config::Config, rain::CellState, stats::SystemStats};
 
@@ -127,15 +128,27 @@ pub struct Renderer {
     pub adapter_info: wgpu::AdapterInfo,
     fps: f32,
     last_render: Option<std::time::Instant>,
+    overlay_time: f32,
+    rng: SmallRng,
 }
+
+// Printable ASCII chars used for character glitching.
+const GLITCH_CHARS: &[char] = &[
+    '!', '#', '$', '%', '&', '*', '+', '-', '/', ':', '<', '=', '>', '?', '@',
+    'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M',
+    'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z',
+    '|', '~', '░', '█',
+];
 
 fn build_debug_instances(
     stats: &SystemStats,
     atlas: &GlyphAtlas,
     screen_w: u32,
-    _screen_h: u32,
+    screen_h: u32,
     fps: f32,
     gpu_name: &str,
+    overlay_time: f32,
+    rng: &mut SmallRng,
     out: &mut Vec<Instance>,
 ) -> [f32; 4] {
     fn bar(pct: f32) -> String {
@@ -159,14 +172,29 @@ fn build_debug_instances(
     let panel_w = max_cols as f32 * cw + pad * 2.0;
     let panel_h = lines.len() as f32 * ch + pad * 2.0;
     let margin = 12.0_f32;
-    let panel_x = screen_w as f32 - panel_w - margin;
-    let panel_y = margin;
+
+    // Slow sinusoidal drift — different x/y frequencies to avoid repetitive loop.
+    // Periods: ~57s (x) and ~90s (y).
+    let drift_amp = 50.0_f32;
+    let drift_x = (overlay_time * 0.11).sin() * drift_amp;
+    let drift_y = (overlay_time * 0.07).cos() * drift_amp;
+    let base_x = screen_w as f32 - panel_w - margin;
+    let base_y = margin;
+    let panel_x = (base_x + drift_x).clamp(0.0, (screen_w as f32 - panel_w).max(0.0));
+    let panel_y = (base_y + drift_y).clamp(0.0, (screen_h as f32 - panel_h).max(0.0));
+
     let text_x = panel_x + pad;
     let text_y = panel_y + pad;
     out.clear();
     for (row, line) in lines.iter().enumerate() {
         for (col, glyph) in line.chars().enumerate() {
-            let uv = atlas.uv_for_char(glyph);
+            // Occasional character glitch — ephemeral, one frame only.
+            let ch_out = if glyph != ' ' && rng.gen::<f32>() < 0.003 {
+                GLITCH_CHARS[rng.gen_range(0..GLITCH_CHARS.len())]
+            } else {
+                glyph
+            };
+            let uv = atlas.uv_for_char(ch_out);
             out.push(Instance {
                 position: [text_x + col as f32 * cw, text_y + row as f32 * ch],
                 atlas_rect: uv,
@@ -771,6 +799,8 @@ impl Renderer {
             adapter_info,
             fps: 0.0,
             last_render: None,
+            overlay_time: 0.0,
+            rng: SmallRng::from_entropy(),
             instances_scratch: Vec::with_capacity(max_instances),
             debug_instances_scratch: Vec::with_capacity(512),
         }
@@ -793,6 +823,7 @@ impl Renderer {
             if dt > 0.0 {
                 let sample = 1.0 / dt;
                 self.fps = if self.fps == 0.0 { sample } else { self.fps * 0.9 + sample * 0.1 };
+                self.overlay_time += dt;
             }
         }
         self.last_render = Some(now);
@@ -845,6 +876,8 @@ impl Renderer {
                 let rect = build_debug_instances(
                     &stats, &debug.atlas, self.width, self.height, self.fps,
                     &self.adapter_info.name,
+                    self.overlay_time,
+                    &mut self.rng,
                     &mut self.debug_instances_scratch,
                 );
                 let count = (self.debug_instances_scratch.len().min(512)) as u32;
