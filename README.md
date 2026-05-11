@@ -4,6 +4,7 @@ Matrix rain screensaver written in Rust. Wayland/Linux daemon + Windows `.scr` n
 
 [![CI](https://github.com/p-o-d/matrix-screen-saver/actions/workflows/ci.yml/badge.svg)](https://github.com/p-o-d/matrix-screen-saver/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/p-o-d/matrix-screen-saver)](https://github.com/p-o-d/matrix-screen-saver/releases/latest)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
 ## Platform support
 
@@ -133,3 +134,10 @@ crates/
 - Windows 10 or later
 - DirectX 12 or Vulkan GPU
 - No additional runtime dependencies
+
+## License
+
+This project is licensed under the [MIT License](LICENSE).
+
+The Windows binary embeds [JetBrains Mono](https://github.com/JetBrains/JetBrainsMono) as a fallback font,
+which is licensed under the [SIL Open Font License 1.1](LICENSE-OFL).
