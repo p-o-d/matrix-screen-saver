@@ -3,6 +3,7 @@ name: CI
 on:
   push:
     branches: [main]
+    tags: ['v*']
   pull_request:
     branches: [main]
 
@@ -11,7 +12,7 @@ jobs:
     name: Test (matrix-core)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - run: cargo test -p matrix-core
@@ -20,13 +21,13 @@ jobs:
     name: Build Linux
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - name: Install Wayland dev libs
         run: sudo apt-get update && sudo apt-get install -y libwayland-dev libxkbcommon-dev
       - run: cargo build -p matrix-linux --release
-      - uses: actions/upload-artifact@v5
+      - uses: actions/upload-artifact@v4
         with:
           name: matrix-screensaver-linux-x86_64
           path: target/release/matrix-screensaver
@@ -35,7 +36,7 @@ jobs:
     name: Build Windows (cross from Linux)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: x86_64-pc-windows-gnu
@@ -44,7 +45,7 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y mingw-w64
       - run: cargo build -p matrix-windows --target x86_64-pc-windows-gnu --release
       - run: cp target/x86_64-pc-windows-gnu/release/matrix-screensaver.exe target/x86_64-pc-windows-gnu/release/matrix-screensaver.scr
-      - uses: actions/upload-artifact@v5
+      - uses: actions/upload-artifact@v4
         with:
           name: matrix-screensaver-windows-x86_64-cross
           path: target/x86_64-pc-windows-gnu/release/matrix-screensaver.scr
@@ -53,13 +54,45 @@ jobs:
     name: Build Windows (native)
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - run: cargo build -p matrix-windows --release
       - run: Copy-Item target/release/matrix-screensaver.exe target/release/matrix-screensaver.scr
         shell: powershell
-      - uses: actions/upload-artifact@v5
+      - uses: actions/upload-artifact@v4
         with:
           name: matrix-screensaver-windows-x86_64-native
           path: target/release/matrix-screensaver.scr
+
+  release:
+    name: Publish Release
+    needs: [test, linux, windows-native]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: matrix-screensaver-linux-x86_64
+          path: artifacts/linux
+      - uses: actions/download-artifact@v4
+        with:
+          name: matrix-screensaver-windows-x86_64-native
+          path: artifacts/windows
+      - name: Prepare release assets
+        run: |
+          cp artifacts/linux/matrix-screensaver  artifacts/matrix-screensaver-linux-x86_64
+          cp artifacts/windows/matrix-screensaver.scr artifacts/matrix-screensaver-windows-x86_64.scr
+          chmod +x artifacts/matrix-screensaver-linux-x86_64
+      - name: Create GitHub release
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${{ github.ref_name }}" \
+            --repo "${{ github.repository }}" \
+            --title "Matrix Screensaver ${{ github.ref_name }}" \
+            --generate-notes \
+            "artifacts/matrix-screensaver-linux-x86_64" \
+            "artifacts/matrix-screensaver-windows-x86_64.scr"
