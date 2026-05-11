@@ -32,11 +32,11 @@ impl Default for DisplayConfig {
     fn default() -> Self {
         Self {
             font: "monospace".into(),
-            font_size: 36.0,
+            font_size: 60.0,
             fps: 60,
             scanlines: true,
-            scanline_intensity: 0.25,
-            chromatic_aberration: 0.003,
+            scanline_intensity: 0.30,
+            chromatic_aberration: 0.004,
             debug_overlay: false,
         }
     }
@@ -64,12 +64,12 @@ pub struct RainConfig {
 impl Default for RainConfig {
     fn default() -> Self {
         Self {
-            speed: 1.0,
-            density: 0.05,
+            speed: 0.5,
+            density: 0.01,
             charset: CharsetKind::Mixed,
             drop_length_min: 5,
-            drop_length_max: 25,
-            depth_levels: 6,
+            drop_length_max: 15,
+            depth_levels: 5,
             depth_scale_min: 0.35,
             depth_brightness_min: 0.25,
             cluster_strength: 0.2,

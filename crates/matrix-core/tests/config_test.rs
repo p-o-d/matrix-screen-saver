@@ -4,9 +4,9 @@ use matrix_core::config::{Config, CharsetKind};
 fn default_config_has_expected_values() {
     let cfg = Config::default();
     assert_eq!(cfg.display.fps, 60);
-    assert_eq!(cfg.display.font_size, 36.0);
+    assert_eq!(cfg.display.font_size, 60.0);
     assert_eq!(cfg.rain.charset, CharsetKind::Mixed);
-    assert!((cfg.rain.speed - 1.0).abs() < f32::EPSILON);
+    assert!((cfg.rain.speed - 0.5).abs() < f32::EPSILON);
     assert!(cfg.colors.glow);
     assert_eq!(cfg.idle.timeout_seconds, 120);
 }
