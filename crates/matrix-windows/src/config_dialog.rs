@@ -29,6 +29,7 @@ mod imp {
     const IDC_CHARSET: i32 = 1004;
     const IDC_COLOR: i32 = 1005;
     const IDC_GLOW: i32 = 1006;
+    const IDC_DEBUG: i32 = 1007;
 
     // TBM_GETPOS = WM_USER + 0 = 1024 (not exported by windows 0.52)
     const TBM_GETPOS: u32 = 1024u32;
@@ -247,6 +248,29 @@ mod imp {
                     }
                 }
 
+                // ── Debug overlay checkbox ───────────────────────────────────
+                {
+                    let _ = CreateWindowExW(
+                        windows::Win32::UI::WindowsAndMessaging::WINDOW_EX_STYLE(0),
+                        w!("BUTTON"),
+                        w!("Show debug overlay"),
+                        ws_with(WS_CHILD | WS_VISIBLE | WS_TABSTOP, BS_AUTOCHECKBOX),
+                        10, 262, 200, 24,
+                        hwnd,
+                        HMENU(IDC_DEBUG as isize as *mut _),
+                        hinstance,
+                        None,
+                    );
+                    if let Ok(hchk) = GetDlgItem(hwnd, IDC_DEBUG) {
+                        let check: DLG_BUTTON_CHECK_STATE = if config.display.debug_overlay {
+                            BST_CHECKED
+                        } else {
+                            BST_UNCHECKED
+                        };
+                        SendMessageW(hchk, BM_SETCHECK, WPARAM(check.0 as usize), LPARAM(0));
+                    }
+                }
+
                 // ── OK button ────────────────────────────────────────────────
                 {
                     let _ = CreateWindowExW(
@@ -254,7 +278,7 @@ mod imp {
                         w!("BUTTON"),
                         w!("OK"),
                         ws_with(WS_CHILD | WS_VISIBLE | WS_TABSTOP, BS_DEFPUSHBUTTON),
-                        155, 275, 80, 28,
+                        155, 305, 80, 28,
                         hwnd,
                         HMENU(IDOK.0 as isize as *mut _),
                         hinstance,
@@ -269,7 +293,7 @@ mod imp {
                         w!("BUTTON"),
                         w!("Cancel"),
                         ws_with(WS_CHILD | WS_VISIBLE | WS_TABSTOP, BS_PUSHBUTTON),
-                        245, 275, 80, 28,
+                        245, 305, 80, 28,
                         hwnd,
                         HMENU(IDCANCEL.0 as isize as *mut _),
                         hinstance,
@@ -327,6 +351,12 @@ mod imp {
                     if let Ok(hchk) = GetDlgItem(hwnd, IDC_GLOW) {
                         let state = SendMessageW(hchk, BM_GETCHECK, WPARAM(0), LPARAM(0));
                         config.colors.glow = state.0 == BST_CHECKED.0 as isize;
+                    }
+
+                    // Debug overlay
+                    if let Ok(hchk) = GetDlgItem(hwnd, IDC_DEBUG) {
+                        let state = SendMessageW(hchk, BM_GETCHECK, WPARAM(0), LPARAM(0));
+                        config.display.debug_overlay = state.0 == BST_CHECKED.0 as isize;
                     }
 
                     save_config(&config);
@@ -387,7 +417,7 @@ mod imp {
                 class_name,
                 w!("Matrix Screensaver Settings"),
                 WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_CLIPCHILDREN | WS_VISIBLE,
-                100, 100, 360, 340,
+                100, 100, 360, 370,
                 None,
                 None,
                 hinstance,

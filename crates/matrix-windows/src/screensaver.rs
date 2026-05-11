@@ -197,6 +197,21 @@ pub fn run() {
             .expect("wgpu surface failed")
     };
 
+    // Conditionally build debug atlas and start stats poller
+    let (debug_atlas, stats) = if config.display.debug_overlay {
+        let debug_font_bytes = crate::font::load_font(&config.rain.charset);
+        let debug_charset: Vec<char> = (32u8..=126u8).map(|c| c as char).collect();
+        let dbg_atlas = Arc::new(matrix_core::atlas::GlyphAtlas::build(
+            &debug_charset,
+            14.0,
+            &debug_font_bytes,
+        ));
+        let s = crate::stats::start_stats_poller();
+        (Some(dbg_atlas), Some(s))
+    } else {
+        (None, None)
+    };
+
     // Initialise renderer
     let mut renderer = pollster::block_on(Renderer::new(
         instance,
@@ -205,8 +220,8 @@ pub fn run() {
         h,
         atlas.clone(),
         &config,
-        None,
-        None,
+        debug_atlas,
+        stats,
     ));
 
     // Build rain simulators for each depth level

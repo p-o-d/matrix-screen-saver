@@ -4,6 +4,7 @@ mod font;
 mod screensaver;
 mod preview;
 mod config_dialog;
+mod stats;
 
 fn main() {
     tracing_subscriber::fmt()

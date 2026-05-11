@@ -827,6 +827,7 @@ dependencies = [
  "matrix-core",
  "pollster",
  "raw-window-handle",
+ "toml",
  "tracing",
  "tracing-subscriber",
  "wgpu",
