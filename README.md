@@ -3,15 +3,14 @@
 Matrix rain screensaver written in Rust. Wayland/Linux daemon + Windows `.scr` native screensaver, sharing a common core library.
 
 [![CI](https://github.com/p-o-d/matrix-screen-saver/actions/workflows/ci.yml/badge.svg)](https://github.com/p-o-d/matrix-screen-saver/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/p-o-d/matrix-screen-saver)](https://github.com/p-o-d/matrix-screen-saver/releases/latest)
 
 ## Platform support
 
 | Platform | Status | Download |
 |----------|--------|----------|
-| Linux (Wayland, KDE Plasma 6) | ✅ | [Latest build ↗](https://github.com/p-o-d/matrix-screen-saver/actions/workflows/ci.yml) |
-| Windows 10+ (native `.scr`) | ✅ | [Latest build ↗](https://github.com/p-o-d/matrix-screen-saver/actions/workflows/ci.yml) |
-
-> Binaries are available as artifacts on each CI run (90-day retention). Click the latest passing run → scroll to **Artifacts**.
+| Linux (Wayland, KDE Plasma 6) | ✅ | [Latest release ↗](https://github.com/p-o-d/matrix-screen-saver/releases/latest) |
+| Windows 10+ (native `.scr`) | ✅ | [Latest release ↗](https://github.com/p-o-d/matrix-screen-saver/releases/latest) |
 
 ## Features
 
