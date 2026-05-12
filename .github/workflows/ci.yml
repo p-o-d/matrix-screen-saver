@@ -32,24 +32,6 @@ jobs:
           name: matrix-screensaver-linux-x86_64
           path: target/release/matrix-screensaver
 
-  windows-cross:
-    name: Build Windows (cross from Linux)
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: x86_64-pc-windows-gnu
-      - uses: Swatinem/rust-cache@v2
-      - name: Install mingw-w64
-        run: sudo apt-get update && sudo apt-get install -y mingw-w64
-      - run: cargo build -p matrix-windows --target x86_64-pc-windows-gnu --release
-      - run: cp target/x86_64-pc-windows-gnu/release/matrix-screensaver.exe target/x86_64-pc-windows-gnu/release/matrix-screensaver.scr
-      - uses: actions/upload-artifact@v4
-        with:
-          name: matrix-screensaver-windows-x86_64-cross
-          path: target/x86_64-pc-windows-gnu/release/matrix-screensaver.scr
-
   windows-native:
     name: Build Windows (native)
     runs-on: windows-latest
