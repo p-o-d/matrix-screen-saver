@@ -18,7 +18,8 @@ use windows::Win32::System::LibraryLoader::GetModuleHandleW;
 use windows::Win32::UI::WindowsAndMessaging::{
     CreateWindowExW, DefWindowProcW, DestroyWindow, DispatchMessageW, GetClientRect,
     GetSystemMetrics, MSG, PeekMessageW, PostQuitMessage, RegisterClassExW, ShowWindow,
-    TranslateMessage, WNDCLASSEXW, CS_HREDRAW, CS_VREDRAW, PM_REMOVE, SM_CXSCREEN, SM_CYSCREEN,
+    TranslateMessage, WNDCLASSEXW, CS_HREDRAW, CS_VREDRAW, PM_REMOVE,
+    SM_CXVIRTUALSCREEN, SM_CYVIRTUALSCREEN, SM_XVIRTUALSCREEN, SM_YVIRTUALSCREEN,
     SW_SHOW, WM_DESTROY, WM_KEYDOWN, WM_LBUTTONDOWN, WM_MOUSEMOVE, WM_QUIT, WM_RBUTTONDOWN,
     WS_EX_TOPMOST, WS_POPUP, WS_VISIBLE,
 };
@@ -137,22 +138,24 @@ pub fn run() {
         RegisterClassExW(&wc);
     }
 
-    // Query primary monitor dimensions
-    let (screen_w, screen_h) = unsafe {
-        let w = GetSystemMetrics(SM_CXSCREEN);
-        let h = GetSystemMetrics(SM_CYSCREEN);
-        (w as u32, h as u32)
+    // Query virtual desktop spanning all monitors
+    let (virt_x, virt_y, screen_w, screen_h) = unsafe {
+        let x = GetSystemMetrics(SM_XVIRTUALSCREEN);
+        let y = GetSystemMetrics(SM_YVIRTUALSCREEN);
+        let w = GetSystemMetrics(SM_CXVIRTUALSCREEN);
+        let h = GetSystemMetrics(SM_CYVIRTUALSCREEN);
+        (x, y, w as u32, h as u32)
     };
 
-    // Create fullscreen topmost window
+    // Create window spanning all monitors via virtual screen coordinates
     let hwnd = unsafe {
         CreateWindowExW(
             WS_EX_TOPMOST,
             PCWSTR(class_name.as_ptr()),
             PCWSTR("Matrix Screensaver\0".encode_utf16().collect::<Vec<u16>>().as_ptr()),
             WS_POPUP | WS_VISIBLE,
-            0,
-            0,
+            virt_x,
+            virt_y,
             screen_w as i32,
             screen_h as i32,
             None,
