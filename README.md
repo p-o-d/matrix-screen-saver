@@ -21,6 +21,7 @@ Matrix rain screensaver written in Rust. Wayland/Linux daemon + Windows `.scr` n
 - Scanline overlay and chromatic aberration
 - Configurable charset: katakana / latin / binary / mixed
 - Configurable speed, density, color, FPS, drop length
+- Multi-monitor support on Windows (spans all displays via virtual desktop)
 - Native Win32 settings dialog (accessible from Windows Screen Saver Settings)
 - Debug overlay with CPU/RAM/GPU stats (Linux)
 
@@ -41,7 +42,7 @@ matrix-screensaver --test
 
 ### Windows
 
-1. Download `matrix-screensaver.scr` from [CI artifacts](https://github.com/p-o-d/matrix-screen-saver/actions/workflows/ci.yml)
+1. Download `matrix-screensaver.scr` from the [latest release](https://github.com/p-o-d/matrix-screen-saver/releases/latest)
 2. Copy to `C:\Windows\System32\`
 3. Right-click the `.scr` file → **Install**  
    — or open **Screen Saver Settings** → select **Matrix Screensaver** → click **Settings** to configure

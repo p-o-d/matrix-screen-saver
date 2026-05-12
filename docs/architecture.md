@@ -98,7 +98,7 @@ Parses command-line args and dispatches:
 
 ### Screensaver (`screensaver.rs`)
 
-Creates a `WS_EX_TOPMOST | WS_POPUP` fullscreen window sized to the primary monitor. WndProc exits on `WM_KEYDOWN`, `WM_LBUTTONDOWN`, `WM_RBUTTONDOWN`, and mouse movement past a 10-pixel threshold (tracked with a separate `MOUSE_INITIALIZED` flag to avoid false-quit when the cursor starts at 0,0).
+Creates a `WS_EX_TOPMOST | WS_POPUP` window spanning the full virtual desktop (`SM_XVIRTUALSCREEN`/`SM_YVIRTUALSCREEN` origin, `SM_CXVIRTUALSCREEN`/`SM_CYVIRTUALSCREEN` size) — covers all monitors in multi-display setups. WndProc exits on `WM_KEYDOWN`, `WM_LBUTTONDOWN`, `WM_RBUTTONDOWN`, and mouse movement past a 10-pixel threshold (tracked with a separate `MOUSE_INITIALIZED` flag to avoid false-quit when the cursor starts at 0,0).
 
 Frame loop: `PeekMessage` (non-blocking) → `rain.update(dt)` → `renderer.render()` → `thread::sleep` to hit FPS target.
 
