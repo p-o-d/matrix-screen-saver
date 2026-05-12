@@ -21,7 +21,7 @@ Matrix rain screensaver written in Rust. Wayland/Linux daemon + Windows `.scr` n
 - Scanline overlay and chromatic aberration
 - Configurable charset: katakana / latin / binary / mixed
 - Configurable speed, density, color, FPS, drop length
-- Multi-monitor support on Windows (spans all displays via virtual desktop)
+- Multi-monitor support (Linux: one renderer per output; Windows: spans virtual desktop)
 - Native Win32 settings dialog (accessible from Windows Screen Saver Settings)
 - Debug overlay with CPU/RAM/GPU stats (Linux)
 
