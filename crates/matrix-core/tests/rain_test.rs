@@ -90,7 +90,8 @@ fn head_cell_has_maximum_brightness() {
 
 #[test]
 fn inverted_drop_length_bounds_normalized() {
-    // Constructor normalizes min/max so gen_range doesn't panic
+    // Constructor normalizes min/max so gen_range(min..=max) never panics.
+    // Use enough frames that even worst-case length=20 / speed=4 drops become visible.
     let cfg = RainConfig {
         density: 1.0,
         drop_length_min: 20,
@@ -98,7 +99,7 @@ fn inverted_drop_length_bounds_normalized() {
         ..default_rain_config()
     };
     let mut sim = RainSimulator::new(5, 30, vec!['A'], &cfg);
-    for _ in 0..60 {
+    for _ in 0..400 {
         sim.update(1.0 / 60.0);
     }
     let any_lit = sim.cells.iter().flatten().any(|c| c.brightness > 0.0);
