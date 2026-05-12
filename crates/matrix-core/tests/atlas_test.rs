@@ -1,3 +1,20 @@
+/// Cross-platform test using the embedded JetBrains Mono font shipped with the Windows crate.
+#[test]
+fn build_atlas_from_embedded_font() {
+    const FONT: &[u8] = include_bytes!("../../matrix-windows/assets/JetBrainsMono-Regular.ttf");
+    let chars: Vec<char> = "ABCabc".chars().collect();
+    let atlas = matrix_core::atlas::GlyphAtlas::build(&chars, 14.0, FONT);
+    assert!(atlas.atlas_width > 0);
+    assert!(atlas.atlas_height > 0);
+    assert_eq!(atlas.chars.len(), 6);
+    assert!(atlas.cell_width > 0);
+    assert!(atlas.cell_height > 0);
+    // atlas_width = cell_width * num_chars
+    assert_eq!(atlas.atlas_width, atlas.cell_width * 6);
+    // data length matches atlas dimensions
+    assert_eq!(atlas.data.len(), (atlas.atlas_width * atlas.atlas_height) as usize);
+}
+
 #[cfg(unix)]
 #[test]
 fn build_atlas_from_bytes() {

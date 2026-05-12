@@ -89,6 +89,65 @@ fn head_cell_has_maximum_brightness() {
 }
 
 #[test]
+fn inverted_drop_length_bounds_normalized() {
+    // Constructor normalizes min/max so gen_range doesn't panic
+    let cfg = RainConfig {
+        density: 1.0,
+        drop_length_min: 20,
+        drop_length_max: 3, // intentionally inverted
+        ..default_rain_config()
+    };
+    let mut sim = RainSimulator::new(5, 30, vec!['A'], &cfg);
+    for _ in 0..60 {
+        sim.update(1.0 / 60.0);
+    }
+    let any_lit = sim.cells.iter().flatten().any(|c| c.brightness > 0.0);
+    assert!(any_lit, "sim with inverted drop bounds never spawned drops");
+}
+
+#[test]
+fn drops_expire_and_cells_stay_in_range() {
+    // Run for a long time; brightness must always stay in [0, 1]
+    // and the sim must not OOM/hang (i.e., dead drops are pruned).
+    let cfg = RainConfig {
+        density: 1.0,
+        speed: 2.0,
+        drop_length_min: 3,
+        drop_length_max: 5,
+        ..default_rain_config()
+    };
+    let mut sim = RainSimulator::new(10, 20, vec!['A'], &cfg);
+    for _ in 0..3000 {
+        sim.update(1.0 / 60.0);
+    }
+    for cell in sim.cells.iter().flatten() {
+        assert!(
+            cell.brightness >= 0.0 && cell.brightness <= 1.0,
+            "brightness out of [0,1]: {}",
+            cell.brightness
+        );
+    }
+}
+
+#[test]
+fn cluster_strength_nonzero_produces_output() {
+    // Smoke test: clustering logic runs without panic and cells get lit.
+    let cfg = RainConfig {
+        density: 0.5,
+        cluster_strength: 1.0,
+        drop_length_min: 3,
+        drop_length_max: 5,
+        ..default_rain_config()
+    };
+    let mut sim = RainSimulator::new(10, 20, vec!['A'], &cfg);
+    for _ in 0..120 {
+        sim.update(1.0 / 60.0);
+    }
+    let any_lit = sim.cells.iter().flatten().any(|c| c.brightness > 0.0);
+    assert!(any_lit, "no cells lit with cluster_strength=1.0");
+}
+
+#[test]
 fn brightness_decreases_from_head_to_tail() {
     let cfg = RainConfig {
         density: 1.0,
