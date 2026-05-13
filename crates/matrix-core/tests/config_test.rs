@@ -179,6 +179,49 @@ fn validation_resets_timeout_below_min() {
 }
 
 #[test]
+fn validation_preserves_fps_at_min_boundary() {
+    let toml = "[display]\nfps = 1";
+    let mut cfg: Config = toml::from_str(toml).unwrap();
+    cfg.clamp_to_defaults();
+    assert_eq!(cfg.display.fps, 1);
+}
+
+#[test]
+fn validation_preserves_fps_at_max_boundary() {
+    let toml = "[display]\nfps = 240";
+    let mut cfg: Config = toml::from_str(toml).unwrap();
+    cfg.clamp_to_defaults();
+    assert_eq!(cfg.display.fps, 240);
+}
+
+#[test]
+fn validation_preserves_font_size_at_boundaries() {
+    for fps_str in &["[display]\nfont_size = 8.0", "[display]\nfont_size = 120.0"] {
+        let mut cfg: Config = toml::from_str(fps_str).unwrap();
+        cfg.clamp_to_defaults();
+        let size = cfg.display.font_size;
+        assert!(size == 8.0 || size == 120.0, "boundary font_size {size} was reset");
+    }
+}
+
+#[test]
+fn validation_preserves_drop_lengths_at_boundaries() {
+    let toml = "[rain]\ndrop_length_min = 1\ndrop_length_max = 100";
+    let mut cfg: Config = toml::from_str(toml).unwrap();
+    cfg.clamp_to_defaults();
+    assert_eq!(cfg.rain.drop_length_min, 1);
+    assert_eq!(cfg.rain.drop_length_max, 100);
+}
+
+#[test]
+fn validation_resets_empty_font_to_default() {
+    let toml = "[display]\nfont = \"\"";
+    let mut cfg: Config = toml::from_str(toml).unwrap();
+    cfg.clamp_to_defaults();
+    assert_eq!(cfg.display.font, Config::default().display.font);
+}
+
+#[test]
 fn validation_preserves_valid_values() {
     let toml = r#"
         [display]

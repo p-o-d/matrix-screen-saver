@@ -144,6 +144,10 @@ impl Config {
         let d = Config::default();
 
         // display
+        if self.display.font.trim().is_empty() {
+            eprintln!("config: font is empty, resetting to {}", d.display.font);
+            self.display.font = d.display.font.clone();
+        }
         if !(8.0_f32..=120.0).contains(&self.display.font_size) {
             eprintln!("config: font_size {} out of [8, 120], resetting to {}", self.display.font_size, d.display.font_size);
             self.display.font_size = d.display.font_size;
