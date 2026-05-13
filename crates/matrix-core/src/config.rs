@@ -127,12 +127,89 @@ impl Config {
             .join("matrix-screensaver/config.toml");
 
         if let Ok(content) = std::fs::read_to_string(&path) {
-            toml::from_str(&content).unwrap_or_else(|e| {
+            let mut cfg = toml::from_str(&content).unwrap_or_else(|e| {
                 eprintln!("config parse error: {e}, using defaults");
                 Config::default()
-            })
+            });
+            cfg.clamp_to_defaults();
+            cfg
         } else {
             Config::default()
+        }
+    }
+
+    /// Reset any field outside its valid range to the struct's Default value.
+    /// Called automatically by `Config::load()` after TOML parsing.
+    pub fn clamp_to_defaults(&mut self) {
+        let d = Config::default();
+
+        // display
+        if !(8.0_f32..=120.0).contains(&self.display.font_size) {
+            eprintln!("config: font_size {} out of [8, 120], resetting to {}", self.display.font_size, d.display.font_size);
+            self.display.font_size = d.display.font_size;
+        }
+        if !(1_u32..=240).contains(&self.display.fps) {
+            eprintln!("config: fps {} out of [1, 240], resetting to {}", self.display.fps, d.display.fps);
+            self.display.fps = d.display.fps;
+        }
+        if !(0.0_f32..=1.0).contains(&self.display.scanline_intensity) {
+            eprintln!("config: scanline_intensity {} out of [0, 1], resetting to {}", self.display.scanline_intensity, d.display.scanline_intensity);
+            self.display.scanline_intensity = d.display.scanline_intensity;
+        }
+        if !(0.0_f32..=0.05).contains(&self.display.chromatic_aberration) {
+            eprintln!("config: chromatic_aberration {} out of [0, 0.05], resetting to {}", self.display.chromatic_aberration, d.display.chromatic_aberration);
+            self.display.chromatic_aberration = d.display.chromatic_aberration;
+        }
+
+        // rain
+        if !(0.1_f32..=10.0).contains(&self.rain.speed) {
+            eprintln!("config: speed {} out of [0.1, 10], resetting to {}", self.rain.speed, d.rain.speed);
+            self.rain.speed = d.rain.speed;
+        }
+        if !(0.001_f32..=1.0).contains(&self.rain.density) {
+            eprintln!("config: density {} out of [0.001, 1], resetting to {}", self.rain.density, d.rain.density);
+            self.rain.density = d.rain.density;
+        }
+        if !(1_usize..=50).contains(&self.rain.drop_length_min) {
+            eprintln!("config: drop_length_min {} out of [1, 50], resetting to {}", self.rain.drop_length_min, d.rain.drop_length_min);
+            self.rain.drop_length_min = d.rain.drop_length_min;
+        }
+        if !(1_usize..=100).contains(&self.rain.drop_length_max) {
+            eprintln!("config: drop_length_max {} out of [1, 100], resetting to {}", self.rain.drop_length_max, d.rain.drop_length_max);
+            self.rain.drop_length_max = d.rain.drop_length_max;
+        }
+        if self.rain.drop_length_min > self.rain.drop_length_max {
+            eprintln!("config: drop_length_min {} > drop_length_max {}, resetting both to defaults", self.rain.drop_length_min, self.rain.drop_length_max);
+            self.rain.drop_length_min = d.rain.drop_length_min;
+            self.rain.drop_length_max = d.rain.drop_length_max;
+        }
+        if !(1_u8..=10).contains(&self.rain.depth_levels) {
+            eprintln!("config: depth_levels {} out of [1, 10], resetting to {}", self.rain.depth_levels, d.rain.depth_levels);
+            self.rain.depth_levels = d.rain.depth_levels;
+        }
+        if !(0.1_f32..=1.0).contains(&self.rain.depth_scale_min) {
+            eprintln!("config: depth_scale_min {} out of [0.1, 1], resetting to {}", self.rain.depth_scale_min, d.rain.depth_scale_min);
+            self.rain.depth_scale_min = d.rain.depth_scale_min;
+        }
+        if !(0.0_f32..=1.0).contains(&self.rain.depth_brightness_min) {
+            eprintln!("config: depth_brightness_min {} out of [0, 1], resetting to {}", self.rain.depth_brightness_min, d.rain.depth_brightness_min);
+            self.rain.depth_brightness_min = d.rain.depth_brightness_min;
+        }
+        if !(0.0_f32..=5.0).contains(&self.rain.cluster_strength) {
+            eprintln!("config: cluster_strength {} out of [0, 5], resetting to {}", self.rain.cluster_strength, d.rain.cluster_strength);
+            self.rain.cluster_strength = d.rain.cluster_strength;
+        }
+
+        // colors
+        if !(0.0_f32..=1.0).contains(&self.colors.glow_intensity) {
+            eprintln!("config: glow_intensity {} out of [0, 1], resetting to {}", self.colors.glow_intensity, d.colors.glow_intensity);
+            self.colors.glow_intensity = d.colors.glow_intensity;
+        }
+
+        // idle
+        if !(30_u64..=86400).contains(&self.idle.timeout_seconds) {
+            eprintln!("config: timeout_seconds {} out of [30, 86400], resetting to {}", self.idle.timeout_seconds, d.idle.timeout_seconds);
+            self.idle.timeout_seconds = d.idle.timeout_seconds;
         }
     }
 

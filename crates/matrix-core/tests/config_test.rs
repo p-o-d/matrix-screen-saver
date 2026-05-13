@@ -111,3 +111,95 @@ fn config_roundtrip_serialization() {
     assert!((restored.colors.glow_intensity - original.colors.glow_intensity).abs() < f32::EPSILON);
     assert_eq!(restored.idle.timeout_seconds, original.idle.timeout_seconds);
 }
+
+#[test]
+fn validation_resets_fps_below_min() {
+    let toml = "[display]\nfps = 0";
+    let mut cfg: Config = toml::from_str(toml).unwrap();
+    cfg.clamp_to_defaults();
+    assert_eq!(cfg.display.fps, Config::default().display.fps);
+}
+
+#[test]
+fn validation_resets_fps_above_max() {
+    let toml = "[display]\nfps = 999";
+    let mut cfg: Config = toml::from_str(toml).unwrap();
+    cfg.clamp_to_defaults();
+    assert_eq!(cfg.display.fps, Config::default().display.fps);
+}
+
+#[test]
+fn validation_preserves_valid_fps() {
+    let toml = "[display]\nfps = 30";
+    let mut cfg: Config = toml::from_str(toml).unwrap();
+    cfg.clamp_to_defaults();
+    assert_eq!(cfg.display.fps, 30);
+}
+
+#[test]
+fn validation_resets_speed_below_min() {
+    let toml = "[rain]\nspeed = 0.0";
+    let mut cfg: Config = toml::from_str(toml).unwrap();
+    cfg.clamp_to_defaults();
+    assert!((cfg.rain.speed - Config::default().rain.speed).abs() < f32::EPSILON);
+}
+
+#[test]
+fn validation_resets_density_above_max() {
+    let toml = "[rain]\ndensity = 2.0";
+    let mut cfg: Config = toml::from_str(toml).unwrap();
+    cfg.clamp_to_defaults();
+    assert!((cfg.rain.density - Config::default().rain.density).abs() < 1e-6);
+}
+
+#[test]
+fn validation_resets_inverted_drop_lengths() {
+    let toml = "[rain]\ndrop_length_min = 30\ndrop_length_max = 5";
+    let mut cfg: Config = toml::from_str(toml).unwrap();
+    cfg.clamp_to_defaults();
+    let d = Config::default();
+    assert_eq!(cfg.rain.drop_length_min, d.rain.drop_length_min);
+    assert_eq!(cfg.rain.drop_length_max, d.rain.drop_length_max);
+}
+
+#[test]
+fn validation_resets_glow_intensity_above_max() {
+    let toml = "[colors]\nglow_intensity = 5.0";
+    let mut cfg: Config = toml::from_str(toml).unwrap();
+    cfg.clamp_to_defaults();
+    assert!((cfg.colors.glow_intensity - Config::default().colors.glow_intensity).abs() < f32::EPSILON);
+}
+
+#[test]
+fn validation_resets_timeout_below_min() {
+    let toml = "[idle]\ntimeout_seconds = 5";
+    let mut cfg: Config = toml::from_str(toml).unwrap();
+    cfg.clamp_to_defaults();
+    assert_eq!(cfg.idle.timeout_seconds, Config::default().idle.timeout_seconds);
+}
+
+#[test]
+fn validation_preserves_valid_values() {
+    let toml = r#"
+        [display]
+        fps = 120
+        font_size = 24.0
+        [rain]
+        speed = 1.5
+        density = 0.05
+        drop_length_min = 4
+        drop_length_max = 20
+        [colors]
+        glow_intensity = 0.5
+        [idle]
+        timeout_seconds = 300
+    "#;
+    let mut cfg: Config = toml::from_str(toml).unwrap();
+    cfg.clamp_to_defaults();
+    assert_eq!(cfg.display.fps, 120);
+    assert!((cfg.display.font_size - 24.0).abs() < f32::EPSILON);
+    assert!((cfg.rain.speed - 1.5).abs() < f32::EPSILON);
+    assert_eq!(cfg.rain.drop_length_min, 4);
+    assert_eq!(cfg.rain.drop_length_max, 20);
+    assert_eq!(cfg.idle.timeout_seconds, 300);
+}
